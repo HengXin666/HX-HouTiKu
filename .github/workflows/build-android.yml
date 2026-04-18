@@ -64,8 +64,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
       # ── 4. Java 环境 (Android 构建需要) ──
       - name: ☕ 安装 JDK 17
