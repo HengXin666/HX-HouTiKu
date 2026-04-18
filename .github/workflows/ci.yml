@@ -38,12 +38,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: worker/pnpm-lock.yaml
 
       - name: 📥 安装依赖
         working-directory: worker
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: 🔍 TypeScript 类型检查
         working-directory: worker
@@ -65,12 +63,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: 📥 安装依赖
         working-directory: frontend
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: 🔍 TypeScript 类型检查
         working-directory: frontend
