@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # ============================================================
-#  unified-push.sh — Shell wrapper for sending push notifications
+#  hx-houtiku.sh — Shell wrapper for sending push notifications
 #
 #  Usage:
-#    ./unified-push.sh --title "Deploy Done" --body "v2.1.0" --priority high --group ci-cd
+#    ./hx-houtiku.sh --title "Deploy Done" --body "v2.1.0" --priority high --group ci-cd
 #
 #  Environment variables:
-#    UNIFIED_PUSH_ENDPOINT  — API base URL
-#    UNIFIED_PUSH_TOKEN     — API bearer token
-#    UNIFIED_PUSH_PUBKEY    — Recipient public key (hex)
-#    UNIFIED_PUSH_NAME      — Recipient name
+#    HX_HOUTIKU_ENDPOINT  — API base URL
+#    HX_HOUTIKU_TOKEN     — API bearer token
+#    HX_HOUTIKU_PUBKEY    — Recipient public key (hex)
+#    HX_HOUTIKU_NAME      — Recipient name
 # ============================================================
 
 set -euo pipefail
@@ -31,10 +31,10 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: $0 --title TITLE [--body BODY] [--priority urgent|high|default|low|debug] [--group GROUP]"
       echo ""
       echo "Environment variables:"
-      echo "  UNIFIED_PUSH_ENDPOINT  API base URL"
-      echo "  UNIFIED_PUSH_TOKEN     API bearer token"
-      echo "  UNIFIED_PUSH_PUBKEY    Recipient public key (hex)"
-      echo "  UNIFIED_PUSH_NAME      Recipient name"
+      echo "  HX_HOUTIKU_ENDPOINT  API base URL"
+      echo "  HX_HOUTIKU_TOKEN     API bearer token"
+      echo "  HX_HOUTIKU_PUBKEY    Recipient public key (hex)"
+      echo "  HX_HOUTIKU_NAME      Recipient name"
       exit 0
       ;;
     *) echo "Unknown option: $1"; exit 1 ;;
@@ -47,10 +47,10 @@ if [[ -z "$TITLE" ]]; then
   exit 1
 fi
 
-: "${UNIFIED_PUSH_ENDPOINT:?Set UNIFIED_PUSH_ENDPOINT}"
-: "${UNIFIED_PUSH_TOKEN:?Set UNIFIED_PUSH_TOKEN}"
-: "${UNIFIED_PUSH_PUBKEY:?Set UNIFIED_PUSH_PUBKEY}"
-: "${UNIFIED_PUSH_NAME:?Set UNIFIED_PUSH_NAME}"
+: "${HX_HOUTIKU_ENDPOINT:?Set HX_HOUTIKU_ENDPOINT}"
+: "${HX_HOUTIKU_TOKEN:?Set HX_HOUTIKU_TOKEN}"
+: "${HX_HOUTIKU_PUBKEY:?Set HX_HOUTIKU_PUBKEY}"
+: "${HX_HOUTIKU_NAME:?Set HX_HOUTIKU_NAME}"
 
 # Check for Python (needed for ECIES encryption)
 if ! command -v python3 &>/dev/null; then
@@ -74,7 +74,7 @@ except ImportError:
 pk = bytes.fromhex(sys.argv[1])
 ct = encrypt(pk, sys.argv[2].encode('utf-8'))
 print(base64.b64encode(ct).decode())
-" "$UNIFIED_PUSH_PUBKEY" "$PLAINTEXT")
+" "$HX_HOUTIKU_PUBKEY" "$PLAINTEXT")
 
 if [[ -z "$ENCRYPTED" ]]; then
   echo "❌ Error: Encryption failed" >&2
@@ -95,18 +95,18 @@ print(json.dumps({
     'group': sys.argv[5],
     'timestamp': int(sys.argv[6])
 }))
-" "$MSG_ID" "$UNIFIED_PUSH_NAME" "$ENCRYPTED" "$PRIORITY" "$GROUP" "$TIMESTAMP")
+" "$MSG_ID" "$HX_HOUTIKU_NAME" "$ENCRYPTED" "$PRIORITY" "$GROUP" "$TIMESTAMP")
 
 # Send
-HTTP_CODE=$(curl -s -o /tmp/unified-push-response.json -w "%{http_code}" \
-  -X POST "${UNIFIED_PUSH_ENDPOINT}/api/push" \
-  -H "Authorization: Bearer ${UNIFIED_PUSH_TOKEN}" \
+HTTP_CODE=$(curl -s -o /tmp/hx-houtiku-response.json -w "%{http_code}" \
+  -X POST "${HX_HOUTIKU_ENDPOINT}/api/push" \
+  -H "Authorization: Bearer ${HX_HOUTIKU_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD")
 
 if [[ "$HTTP_CODE" == "201" ]]; then
-  echo "✅ Sent: $(cat /tmp/unified-push-response.json)"
+  echo "✅ Sent: $(cat /tmp/hx-houtiku-response.json)"
 else
-  echo "❌ Failed (HTTP $HTTP_CODE): $(cat /tmp/unified-push-response.json)" >&2
+  echo "❌ Failed (HTTP $HTTP_CODE): $(cat /tmp/hx-houtiku-response.json)" >&2
   exit 1
 fi

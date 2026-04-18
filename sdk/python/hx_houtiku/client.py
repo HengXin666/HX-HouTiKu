@@ -8,12 +8,12 @@ from pathlib import Path
 
 import httpx
 
-from unified_push.config import Config
-from unified_push.crypto import encrypt_for_recipient
-from unified_push.models import Message, Priority, Recipient
+from hx_houtiku.config import Config
+from hx_houtiku.crypto import encrypt_for_recipient
+from hx_houtiku.models import Message, Priority, Recipient
 
 
-class UnifiedPushClient:
+class HxHoutikuClient:
     """Client for sending encrypted push notifications."""
 
     def __init__(
@@ -42,7 +42,7 @@ class UnifiedPushClient:
         )
 
     @classmethod
-    def from_env(cls) -> UnifiedPushClient:
+    def from_env(cls) -> HxHoutikuClient:
         """Create client from environment variables."""
         config = Config.from_env()
         return cls(
@@ -52,7 +52,7 @@ class UnifiedPushClient:
         )
 
     @classmethod
-    def from_config(cls, path: str | Path) -> UnifiedPushClient:
+    def from_config(cls, path: str | Path) -> HxHoutikuClient:
         """Create client from YAML/JSON config file."""
         config = Config.from_file(path)
         return cls(
@@ -127,7 +127,7 @@ class UnifiedPushClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> UnifiedPushClient:
+    def __enter__(self) -> HxHoutikuClient:
         return self
 
     def __exit__(self, *_: object) -> None:

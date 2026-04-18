@@ -20,8 +20,8 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/unified-push/unified-push.git
-cd unified-push
+git clone https://github.com/HX-HouTiKu/HX-HouTiKu.git
+cd HX-HouTiKu
 
 # ========== 后端 ==========
 cd worker
@@ -30,7 +30,7 @@ cp wrangler.example.toml wrangler.toml
 # 编辑 wrangler.toml, 填入你的 database_id(参考部署文档)
 
 # 初始化本地数据库
-npx wrangler d1 execute unified-push --local --file=schema.sql
+npx wrangler d1 execute hx-houtiku --local --file=schema.sql
 
 # 启动本地开发服务器(默认 http://localhost:8787)
 pnpm dev
@@ -61,7 +61,7 @@ uv run pytest
 ## 项目结构
 
 ```
-unified-push/
+HX-HouTiKu/
 ├── worker/              # Cloudflare Worker(API 后端)
 │   ├── src/
 │   │   ├── index.ts         # 入口文件(Hono 路由挂载)
@@ -96,7 +96,7 @@ unified-push/
 │   ├── package.json
 │   └── vite.config.ts
 ├── sdk/python/          # Python SDK
-│   ├── unified_push/
+│   ├── hx_houtiku/
 │   │   ├── __init__.py      # 包入口, 导出 push() 函数
 │   │   ├── client.py        # 推送客户端
 │   │   ├── crypto.py        # ECIES 加密
@@ -105,7 +105,7 @@ unified-push/
 │   │   └── cli.py           # 命令行入口
 │   └── pyproject.toml
 ├── scripts/
-│   └── unified-push.sh     # Shell 推送脚本
+│   └── hx-houtiku.sh       # Shell 推送脚本
 └── docs/                # 文档
 ```
 

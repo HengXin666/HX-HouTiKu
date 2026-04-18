@@ -88,7 +88,7 @@ PBKDF2 的迭代次数决定了暴力破解的成本。60 万次使得:
 
 ```
 IndexedDB
-└── unified-push-keystore
+└── hx-houtiku-keystore
     ├── encrypted_private_key  (AES-256-GCM 密文)
     ├── salt                   (PBKDF2 随机盐)
     ├── iv                     (AES 初始化向量)

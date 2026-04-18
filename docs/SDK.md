@@ -26,10 +26,10 @@
 
 ```bash
 # 推荐使用 uv
-uv add unified-push
+uv add hx-houtiku
 
 # 或者 pip
-pip install unified-push
+pip install hx-houtiku
 ```
 
 要求 Python 3.10+。SDK 依赖: `eciespy`(ECIES 加密)、`httpx`(HTTP 客户端)、`pyyaml`(配置文件解析)。
@@ -39,9 +39,9 @@ pip install unified-push
 最简单的用法——一行代码发送消息: 
 
 ```python
-from unified_push import push
+from hx_houtiku import push
 
-# 前提: 已设置环境变量 UNIFIED_PUSH_ENDPOINT、UNIFIED_PUSH_TOKEN、UNIFIED_PUSH_RECIPIENTS
+# 前提: 已设置环境变量 HX_HOUTIKU_ENDPOINT、HX_HOUTIKU_TOKEN、HX_HOUTIKU_RECIPIENTS
 push("任务完成", "已处理 1200 条记录", priority="low", group="crawler")
 ```
 
@@ -53,23 +53,23 @@ push("任务完成", "已处理 1200 条记录", priority="low", group="crawler"
 
 ### 客户端 API
 
-如果需要更多控制, 使用 `UnifiedPushClient` 类: 
+如果需要更多控制, 使用 `HxHoutikuClient` 类: 
 
 ```python
-from unified_push import UnifiedPushClient
+from hx_houtiku import HxHoutikuClient
 
 # ============= 三种创建方式 =============
 
 # 方式一: 从环境变量创建
-client = UnifiedPushClient.from_env()
+client = HxHoutikuClient.from_env()
 
 # 方式二: 从配置文件创建
-client = UnifiedPushClient.from_config("~/.unified-push.yaml")
+client = HxHoutikuClient.from_config("~/.hx-houtiku.yaml")
 
 # 方式三: 手动指定参数
-client = UnifiedPushClient(
-    endpoint="https://unified-push-api.xxx.workers.dev",
-    api_token="sk-unified-push-xxx",
+client = HxHoutikuClient(
+    endpoint="https://hx-houtiku-api.xxx.workers.dev",
+    api_token="sk-hx-houtiku-xxx",
     recipients=[
         {"name": "alice", "public_key": "04a1b2c3d4e5f6..."},
         {"name": "bob", "public_key": "04d4e5f6a7b8c9..."},
@@ -96,7 +96,7 @@ print(result)
 client.close()
 
 # 推荐用 with 语句自动管理: 
-with UnifiedPushClient.from_env() as client:
+with HxHoutikuClient.from_env() as client:
     client.send("Hello", "World!")
     client.send("再发一条", "没问题")
 # 离开 with 块自动 close
@@ -120,7 +120,7 @@ SDK 支持三种配置来源, 按优先级从高到低:
 #### 1. 手动传参(最高优先级)
 
 ```python
-client = UnifiedPushClient(
+client = HxHoutikuClient(
     endpoint="https://...",
     api_token="sk-...",
     recipients=[...],
@@ -131,19 +131,19 @@ client = UnifiedPushClient(
 
 ```bash
 # 必填
-export UNIFIED_PUSH_ENDPOINT="https://unified-push-api.xxx.workers.dev"
-export UNIFIED_PUSH_TOKEN="sk-unified-push-xxx"
+export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.xxx.workers.dev"
+export HX_HOUTIKU_TOKEN="sk-hx-houtiku-xxx"
 
 # 接收者列表(JSON 数组格式)
-export UNIFIED_PUSH_RECIPIENTS='[{"name":"alice","public_key":"04a1b2c3..."}]'
+export HX_HOUTIKU_RECIPIENTS='[{"name":"alice","public_key":"04a1b2c3..."}]'
 ```
 
 Windows PowerShell: 
 
 ```powershell
-$env:UNIFIED_PUSH_ENDPOINT = "https://unified-push-api.xxx.workers.dev"
-$env:UNIFIED_PUSH_TOKEN = "sk-unified-push-xxx"
-$env:UNIFIED_PUSH_RECIPIENTS = '[{"name":"alice","public_key":"04a1b2c3..."}]'
+$env:HX_HOUTIKU_ENDPOINT = "https://hx-houtiku-api.xxx.workers.dev"
+$env:HX_HOUTIKU_TOKEN = "sk-hx-houtiku-xxx"
+$env:HX_HOUTIKU_RECIPIENTS = '[{"name":"alice","public_key":"04a1b2c3..."}]'
 ```
 
 如果想持久化, 加到 `$PROFILE` 文件(PowerShell)或 `~/.bashrc`(Linux/macOS)。
@@ -151,9 +151,9 @@ $env:UNIFIED_PUSH_RECIPIENTS = '[{"name":"alice","public_key":"04a1b2c3..."}]'
 #### 3. YAML/JSON 配置文件
 
 ```yaml
-# ~/.unified-push.yaml
-endpoint: https://unified-push-api.xxx.workers.dev
-api_token: sk-unified-push-xxx
+# ~/.hx-houtiku.yaml
+endpoint: https://hx-houtiku-api.xxx.workers.dev
+api_token: sk-hx-houtiku-xxx
 recipients:
   - name: alice
     public_key: "04a1b2c3d4e5f6..."
@@ -167,32 +167,32 @@ defaults:
 使用: 
 
 ```python
-client = UnifiedPushClient.from_config("~/.unified-push.yaml")
+client = HxHoutikuClient.from_config("~/.hx-houtiku.yaml")
 # 或 JSON 格式也行
-client = UnifiedPushClient.from_config("~/.unified-push.json")
+client = HxHoutikuClient.from_config("~/.hx-houtiku.json")
 ```
 
 > **安全提示**: 配置文件包含 API Token, 确保文件权限为 `600`: 
 > ```bash
-> chmod 600 ~/.unified-push.yaml
+> chmod 600 ~/.hx-houtiku.yaml
 > ```
 
 ### CLI 命令行
 
-安装 SDK 后自动获得 `unified-push` 命令: 
+安装 SDK 后自动获得 `hx-houtiku` 命令: 
 
 ```bash
 # 基本用法
-unified-push "部署完成" -b "v2.1.0 已部署到生产环境" -p high -g ci-cd
+hx-houtiku "部署完成" -b "v2.1.0 已部署到生产环境" -p high -g ci-cd
 
 # 指定配置文件
-unified-push "告警" -b "CPU 过高" -p urgent -g alerts -c ~/.unified-push.yaml
+hx-houtiku "告警" -b "CPU 过高" -p urgent -g alerts -c ~/.hx-houtiku.yaml
 
 # 发送给指定接收人
-unified-push "测试消息" -b "仅发给 alice" -r alice
+hx-houtiku "测试消息" -b "仅发给 alice" -r alice
 
 # 查看帮助
-unified-push --help
+hx-houtiku --help
 ```
 
 #### CLI 参数
@@ -217,16 +217,16 @@ unified-push --help
 ### 配置
 
 ```bash
-export UNIFIED_PUSH_ENDPOINT="https://unified-push-api.xxx.workers.dev"
-export UNIFIED_PUSH_TOKEN="sk-unified-push-xxx"
-export UNIFIED_PUSH_PUBKEY="04a1b2c3d4e5f6..."   # 接收者公钥(hex 格式)
-export UNIFIED_PUSH_NAME="alice"                   # 接收者名称
+export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.xxx.workers.dev"
+export HX_HOUTIKU_TOKEN="sk-hx-houtiku-xxx"
+export HX_HOUTIKU_PUBKEY="04a1b2c3d4e5f6..."   # 接收者公钥(hex 格式)
+export HX_HOUTIKU_NAME="alice"                   # 接收者名称
 ```
 
 ### 使用
 
 ```bash
-./scripts/unified-push.sh \
+./scripts/hx-houtiku.sh \
   --title "备份完成" \
   --body "每日备份耗时 3m22s" \
   --priority low \
@@ -249,8 +249,8 @@ export UNIFIED_PUSH_NAME="alice"                   # 接收者名称
 如果你想自行处理加密, 可以直接调用 API: 
 
 ```bash
-curl -X POST https://unified-push-api.xxx.workers.dev/api/push \
-  -H "Authorization: Bearer sk-unified-push-xxx" \
+curl -X POST https://hx-houtiku-api.xxx.workers.dev/api/push \
+  -H "Authorization: Bearer sk-hx-houtiku-xxx" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "自定义消息ID(UUID格式)",
@@ -285,25 +285,25 @@ jobs:
       - name: 推送通知
         if: success()
         env:
-          UNIFIED_PUSH_ENDPOINT: ${{ secrets.PUSH_ENDPOINT }}
-          UNIFIED_PUSH_TOKEN: ${{ secrets.PUSH_TOKEN }}
-          UNIFIED_PUSH_RECIPIENTS: ${{ secrets.PUSH_RECIPIENTS }}
+          HX_HOUTIKU_ENDPOINT: ${{ secrets.PUSH_ENDPOINT }}
+          HX_HOUTIKU_TOKEN: ${{ secrets.PUSH_TOKEN }}
+          HX_HOUTIKU_RECIPIENTS: ${{ secrets.PUSH_RECIPIENTS }}
         run: |
-          pip install unified-push
+          pip install hx-houtiku
           python -c "
-          from unified_push import push
+          from hx_houtiku import push
           push('部署完成 ✅', '提交 ${{ github.sha }} 已部署', priority='default', group='ci-cd')
           "
       - name: 部署失败通知
         if: failure()
         env:
-          UNIFIED_PUSH_ENDPOINT: ${{ secrets.PUSH_ENDPOINT }}
-          UNIFIED_PUSH_TOKEN: ${{ secrets.PUSH_TOKEN }}
-          UNIFIED_PUSH_RECIPIENTS: ${{ secrets.PUSH_RECIPIENTS }}
+          HX_HOUTIKU_ENDPOINT: ${{ secrets.PUSH_ENDPOINT }}
+          HX_HOUTIKU_TOKEN: ${{ secrets.PUSH_TOKEN }}
+          HX_HOUTIKU_RECIPIENTS: ${{ secrets.PUSH_RECIPIENTS }}
         run: |
-          pip install unified-push
+          pip install hx-houtiku
           python -c "
-          from unified_push import push
+          from hx_houtiku import push
           push('部署失败 ❌', '分支 ${{ github.ref }}', priority='urgent', group='ci-cd')
           "
 ```
@@ -318,8 +318,8 @@ jobs:
 ```bash
 # crontab -e
 # 每天早上 8 点发送日报
-0 8 * * * UNIFIED_PUSH_ENDPOINT="https://..." UNIFIED_PUSH_TOKEN="sk-..." \
-  /usr/local/bin/unified-push "📊 日报" \
+0 8 * * * HX_HOUTIKU_ENDPOINT="https://..." HX_HOUTIKU_TOKEN="sk-..." \
+  /usr/local/bin/hx-houtiku "📊 日报" \
   -b "$(python3 /path/to/generate_report.py)" \
   -p default -g daily
 ```
@@ -328,7 +328,7 @@ jobs:
 
 ```python
 import sys
-from unified_push import push
+from hx_houtiku import push
 
 try:
     result = run_important_task()
@@ -342,7 +342,7 @@ except Exception as e:
 
 ```python
 import psutil
-from unified_push import push
+from hx_houtiku import push
 
 cpu = psutil.cpu_percent(interval=5)
 mem = psutil.virtual_memory().percent
@@ -379,8 +379,8 @@ if cpu > 90 or mem > 85:
 ### `GET /` — 健康检查
 
 ```bash
-curl https://unified-push-api.xxx.workers.dev/
-# {"name":"unified-push-api","version":"1.0.0","status":"ok"}
+curl https://hx-houtiku-api.xxx.workers.dev/
+# {"name":"hx-houtiku-api","version":"1.0.0","status":"ok"}
 ```
 
 ### `GET /api/config` — 获取公共配置
@@ -388,7 +388,7 @@ curl https://unified-push-api.xxx.workers.dev/
 无需认证。返回 VAPID 公钥等信息。
 
 ```bash
-curl https://unified-push-api.xxx.workers.dev/api/config
+curl https://hx-houtiku-api.xxx.workers.dev/api/config
 # {"vapid_public_key":"BD...","version":"1.0.0","encryption_curve":"secp256k1"}
 ```
 

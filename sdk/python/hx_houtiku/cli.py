@@ -8,7 +8,7 @@ import sys
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="unified-push",
+        prog="hx-houtiku",
         description="Send encrypted push notifications from the command line",
     )
     parser.add_argument("title", help="Message title")
@@ -33,9 +33,9 @@ def main() -> None:
 
     try:
         if args.config:
-            from unified_push.client import UnifiedPushClient
+            from hx_houtiku.client import HxHoutikuClient
 
-            client = UnifiedPushClient.from_config(args.config)
+            client = HxHoutikuClient.from_config(args.config)
             result = client.send(
                 args.title,
                 args.body,
@@ -45,7 +45,7 @@ def main() -> None:
             )
             client.close()
         else:
-            from unified_push import push
+            from hx_houtiku import push
 
             result = push(
                 args.title,

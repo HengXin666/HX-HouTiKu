@@ -1,9 +1,9 @@
 # ============================================================
 #  HX-HouTiKu — Worker 后端自动部署
 #
-#  触发条件：push 到 main 分支，且 worker/ 目录有变更
+#  触发条件: push 到 main 分支, 且 worker/ 目录有变更
 #
-#  需要在 GitHub Secrets 中配置：
+#  需要在 GitHub Secrets 中配置: 
 #    CLOUDFLARE_API_TOKEN  — Cloudflare API Token
 #    CLOUDFLARE_ACCOUNT_ID — Cloudflare Account ID
 #
@@ -20,7 +20,7 @@ on:
       - ".github/workflows/deploy-worker.yml"
   workflow_dispatch: # 支持手动触发
 
-# 同一时间只允许一个部署，取消排队中的旧任务
+# 同一时间只允许一个部署, 取消排队中的旧任务
 concurrency:
   group: deploy-worker-${{ github.ref }}
   cancel-in-progress: true
@@ -62,8 +62,8 @@ jobs:
 
       - name: ✅ 部署完成通知
         if: success()
-        run: echo "🎉 Worker 后端部署成功！"
+        run: echo "🎉 Worker 后端部署成功! "
 
       - name: ❌ 部署失败通知
         if: failure()
-        run: echo "💥 Worker 后端部署失败，请检查日志"
+        run: echo "💥 Worker 后端部署失败, 请检查日志"

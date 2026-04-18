@@ -178,7 +178,7 @@ export function Settings() {
         <p className="text-[11px] text-muted-foreground">
           v1.0.0 · E2E Encrypted ·{" "}
           <a
-            href="https://github.com/unified-push"
+            href="https://github.com/HX-HouTiKu"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-foreground underline underline-offset-2"

@@ -7,7 +7,7 @@
 
 import { openDB, type IDBPDatabase } from "idb";
 
-const DB_NAME = "unified-push";
+const DB_NAME = "hx-houtiku";
 const DB_VERSION = 1;
 
 interface UPushDB {

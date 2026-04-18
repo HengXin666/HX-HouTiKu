@@ -1,7 +1,7 @@
 [project]
-name = "unified-push"
+name = "hx-houtiku"
 version = "1.0.0"
-description = "End-to-end encrypted unified push notification SDK"
+description = "End-to-end encrypted push notification SDK for HX-HouTiKu"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -19,7 +19,7 @@ dev = [
 ]
 
 [project.scripts]
-unified-push = "unified_push.cli:main"
+hx-houtiku = "hx_houtiku.cli:main"
 
 [build-system]
 requires = ["hatchling"]

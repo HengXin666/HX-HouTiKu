@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from unified_push.models import Recipient
+from hx_houtiku.models import Recipient
 
 
 @dataclass
@@ -21,15 +21,15 @@ class Config:
     @classmethod
     def from_env(cls) -> Config:
         """Load config from environment variables."""
-        endpoint = os.environ.get("UNIFIED_PUSH_ENDPOINT")
+        endpoint = os.environ.get("HX_HOUTIKU_ENDPOINT")
         if not endpoint:
-            raise ValueError("UNIFIED_PUSH_ENDPOINT environment variable is required")
+            raise ValueError("HX_HOUTIKU_ENDPOINT environment variable is required")
 
-        token = os.environ.get("UNIFIED_PUSH_TOKEN")
+        token = os.environ.get("HX_HOUTIKU_TOKEN")
         if not token:
-            raise ValueError("UNIFIED_PUSH_TOKEN environment variable is required")
+            raise ValueError("HX_HOUTIKU_TOKEN environment variable is required")
 
-        recipients_json = os.environ.get("UNIFIED_PUSH_RECIPIENTS", "[]")
+        recipients_json = os.environ.get("HX_HOUTIKU_RECIPIENTS", "[]")
         raw_recipients = json.loads(recipients_json)
         recipients = [Recipient(name=r["name"], public_key=r["public_key"]) for r in raw_recipients]
 
