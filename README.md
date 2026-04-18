@@ -532,6 +532,7 @@ cd sdk/python && uv sync && uv run pytest
 |--------|------|----------|------|
 | 🚀 部署后端 | `.github/workflows/deploy-worker.yml` | `worker/` 目录变更 | 类型检查 → 部署 Worker |
 | 🌐 部署前端 | `.github/workflows/deploy-frontend.yml` | `frontend/` 目录变更 | 类型检查 → 构建 PWA → 部署到 Pages |
+| 📱 构建 App | `.github/workflows/build-android.yml` | 推送 `v*` 标签 / 手动触发 | 构建签名 APK → 上传到 GitHub Release |
 | 🔍 CI 检查 | `.github/workflows/ci.yml` | 所有 push / PR | 后端+前端+SDK 代码质量检查 |
 
 ### 配置步骤(5 分钟)
@@ -566,6 +567,10 @@ npx wrangler whoami
 |------|------|-----|
 | **Secret** | `CLOUDFLARE_API_TOKEN` | 第 1 步拿到的 API Token |
 | **Secret** | `CLOUDFLARE_ACCOUNT_ID` | 第 2 步拿到的 Account ID |
+| **Secret** | `ANDROID_KEYSTORE_BASE64` | 签名密钥库 Base64 (见下方生成方式) |
+| **Secret** | `ANDROID_KEYSTORE_PASSWORD` | 密钥库密码 |
+| **Secret** | `ANDROID_KEY_ALIAS` | 签名密钥别名 |
+| **Secret** | `ANDROID_KEY_PASSWORD` | 签名密钥密码 |
 | **Variable** | `VITE_API_BASE` | 后端 Worker URL, 如 `https://hx-houtiku-api.xxx.workers.dev` |
 
 > ⚠️ `VITE_API_BASE` 是 **Variable**(明文), 不是 Secret, 因为它会编译进前端代码。
@@ -584,7 +589,46 @@ npx wrangler whoami
 - 🖥️ **Web 端**: 浏览器直接访问 Pages URL
 - 📱 **手机端**: 手机浏览器打开 → "添加到主屏幕" → 全屏运行, 等同原生 App
 
+**Android 原生 App**: 除了 PWA, 还可以通过 Capacitor 打包成真正的 Android APK: 
+- 🤖 **自动发版**: 推送 `v1.0.0` 格式的 tag → 自动构建签名 APK → 上传到 GitHub Releases
+- 📥 **手动触发**: GitHub Actions 页面手动触发, 可选 debug/release 模式
+- 📦 **下载安装**: 在 [Releases](../../releases) 页面下载 APK, 手机直接安装
+
 部署后全球 300+ CDN 节点加速, 自带 HTTPS 证书。
+
+### 生成 Android 签名密钥
+
+打包 Release APK 需要签名密钥。**只需生成一次**, 妥善保管: 
+
+```bash
+# 1. 生成签名密钥库 (会提示输入密码和信息)
+keytool -genkeypair -v \
+  -keystore hx-houtiku.keystore \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -alias hx-houtiku \
+  -storepass YOUR_STORE_PASSWORD \
+  -keypass YOUR_KEY_PASSWORD
+
+# 2. 转为 Base64 (用于 GitHub Secrets)
+base64 -i hx-houtiku.keystore -o keystore-base64.txt
+
+# Windows PowerShell:
+# [Convert]::ToBase64String([IO.File]::ReadAllBytes("hx-houtiku.keystore")) > keystore-base64.txt
+```
+
+然后把 `keystore-base64.txt` 的内容复制到 GitHub Secret `ANDROID_KEYSTORE_BASE64` 中。
+
+> ⚠️ **密钥库文件 (`hx-houtiku.keystore`) 不要提交到 Git! ** 丢失 = 无法更新已安装的 App。
+
+### 发版流程
+
+```bash
+# 打 tag 自动触发构建 + 发布到 GitHub Releases
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions 会自动:  构建前端 → Capacitor 同步 → Gradle 编译 → 签名 APK → 创建 Release 页面 → 上传 APK。
 
 ## 手动更新部署
 

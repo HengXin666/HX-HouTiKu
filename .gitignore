@@ -28,5 +28,14 @@ Thumbs.db
 .wrangler/
 .mf/
 
+# Capacitor native projects (CI 中动态生成)
+frontend/android/
+frontend/ios/
+
+# Android signing keys
+*.keystore
+*.jks
+keystore-base64.txt
+
 # Codebuddy
 .codebuddy/

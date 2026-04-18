@@ -1,0 +1,233 @@
+# ============================================================
+#  HX-HouTiKu — Android APK 构建 & 发布
+#
+#  触发条件:
+#    - 推送 v* 标签时自动构建 (如 v1.0.0)
+#    - 手动触发 (workflow_dispatch)
+#
+#  需要在 GitHub Secrets 中配置:
+#    ANDROID_KEYSTORE_BASE64 — 签名密钥库的 Base64 编码
+#    ANDROID_KEYSTORE_PASSWORD — 密钥库密码
+#    ANDROID_KEY_ALIAS — 签名密钥别名
+#    ANDROID_KEY_PASSWORD — 签名密钥密码
+#
+#  需要在 GitHub Variables 中配置:
+#    VITE_API_BASE — 后端 Worker URL
+#
+#  首次使用?  见 README.md "生成签名密钥" 章节
+# ============================================================
+
+name: 📱 构建 Android App
+
+on:
+  push:
+    tags:
+      - "v*" # 推送 v1.0.0 等标签时触发
+  workflow_dispatch: # 支持手动触发
+    inputs:
+      build_type:
+        description: "构建类型"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - debug
+
+concurrency:
+  group: build-android-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── 权限: 创建 Release 需要 write 权限 ──
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: 🤖 构建 Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. 检出代码 ──
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      # ── 2. 安装 pnpm ──
+      - name: 📦 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # ── 3. Node.js 环境 ──
+      - name: 🟢 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # ── 4. Java 环境 (Android 构建需要) ──
+      - name: ☕ 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # ── 5. Android SDK ──
+      - name: 🤖 安装 Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ── 6. 安装前端依赖 ──
+      - name: 📥 安装前端依赖
+        working-directory: frontend
+        run: pnpm install
+
+      # ── 7. 构建前端 Web 资产 ──
+      - name: 🔨 构建前端
+        working-directory: frontend
+        run: pnpm build
+        env:
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+
+      # ── 8. 初始化 Capacitor Android 项目 ──
+      - name: 📱 初始化 Capacitor Android
+        working-directory: frontend
+        run: |
+          # 添加 Android 平台（如果 android/ 目录不存在）
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          # 同步 Web 资产到原生项目
+          npx cap sync android
+
+      # ── 9. 设置版本号 ──
+      - name: 🏷️ 设置版本号
+        working-directory: frontend/android
+        run: |
+          # 从 tag 或 package.json 提取版本号
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"  # 去掉 v 前缀
+          else
+            VERSION=$(node -p "require('../package.json').version")
+          fi
+
+          # 计算 versionCode (MAJOR*10000 + MINOR*100 + PATCH)
+          IFS='.' read -ra PARTS <<< "$VERSION"
+          MAJOR="${PARTS[0]:-1}"
+          MINOR="${PARTS[1]:-0}"
+          PATCH="${PARTS[2]:-0}"
+          VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+
+          echo "📌 Version: $VERSION (code: $VERSION_CODE)"
+
+          # 写入 build.gradle
+          sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" app/build.gradle
+
+      # ── 10. Gradle 缓存 ──
+      - name: 📦 Gradle 缓存
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            frontend/android/.gradle
+          key: gradle-${{ runner.os }}-${{ hashFiles('frontend/android/**/*.gradle*', 'frontend/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ── 11. 构建 APK ──
+      - name: 🔨 构建 APK
+        working-directory: frontend/android
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+
+          if [ "$BUILD_TYPE" = "debug" ]; then
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          else
+            ./gradlew assembleRelease --no-daemon --stacktrace
+          fi
+
+      # ── 12. 签名 Release APK ──
+      - name: 🔐 签名 APK
+        if: github.event.inputs.build_type != 'debug'
+        uses: r0adkll/sign-android-release@v1
+        id: sign_apk
+        with:
+          releaseDirectory: frontend/android/app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: "34.0.0"
+
+      # ── 13. 重命名产物 ──
+      - name: 📝 重命名 APK
+        id: rename
+        run: |
+          VERSION="${{ github.ref_name || 'dev' }}"
+          VERSION="${VERSION#v}"
+          BUILD_TYPE="${{ github.event.inputs.build_type || 'release' }}"
+
+          if [ "$BUILD_TYPE" = "debug" ]; then
+            SRC="frontend/android/app/build/outputs/apk/debug/app-debug.apk"
+            DEST="HX-HouTiKu-${VERSION}-debug.apk"
+          else
+            SRC="${{ steps.sign_apk.outputs.signedReleaseFile }}"
+            DEST="HX-HouTiKu-${VERSION}-release.apk"
+          fi
+
+          cp "$SRC" "$DEST"
+          echo "apk_path=$DEST" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$DEST" >> "$GITHUB_OUTPUT"
+
+          # 输出 APK 信息
+          echo "📦 APK 大小: $(du -sh "$DEST" | cut -f1)"
+          echo "📱 文件名: $DEST"
+
+      # ── 14. 上传构建产物 ──
+      - name: 📤 上传 APK 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ steps.rename.outputs.apk_path }}
+          retention-days: 30
+
+      # ── 15. 创建 GitHub Release (仅 tag 触发时) ──
+      - name: 🎉 创建 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.rename.outputs.apk_path }}
+          generate_release_notes: true
+          body: |
+            ## 📱 HX-HouTiKu ${{ github.ref_name }}
+
+            ### 下载安装
+            1. 下载下方的 `.apk` 文件
+            2. 在 Android 手机上打开，允许"未知来源"安装
+            3. 首次打开按设置向导完成配置
+
+            ### 也可以用 PWA
+            - 🌐 直接访问 Web 版，浏览器中"添加到主屏幕"
+
+            ---
+            > ⚠️ 如果提示"不安全的应用"，点击"仍要安装"即可（自签名证书）
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 16. 构建摘要 ──
+      - name: 📊 构建摘要
+        if: always()
+        run: |
+          echo "## 📱 Android 构建结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 项目 | 值 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 APK | \`${{ steps.rename.outputs.apk_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🏷️ 版本 | \`${{ github.ref_name || 'dev' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🔨 类型 | \`${{ github.event.inputs.build_type || 'release' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📅 时间 | \`$(date -u '+%Y-%m-%d %H:%M UTC')\` |" >> $GITHUB_STEP_SUMMARY
