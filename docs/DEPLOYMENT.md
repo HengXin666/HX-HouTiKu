@@ -1,6 +1,6 @@
 # 部署指南
 
-> 本文档是 Unified Push 的完整部署教程。
+> 本文档是 HX-HouTiKu 的完整部署教程。
 > 整套系统运行在 **Cloudflare 免费套餐**上, 不需要信用卡, 不需要自己的服务器。
 
 ---
@@ -16,7 +16,7 @@
 - [第五步: 首次设置](#第五步首次设置)
 - [第六步: 配置推送来源](#第六步配置推送来源)
 - [可选: 绑定自定义域名](#可选绑定自定义域名)
-- [可选: GitHub 自动部署](#可选github-自动部署)
+- [可选: GitHub Actions 自动部署（推荐）](#可选github-actions-自动部署推荐)
 - [更新与维护](#更新与维护)
 - [常见问题](#常见问题)
 
@@ -42,7 +42,7 @@ pnpm --version    # 应显示 9.x.x 或更高
 
 ## Cloudflare 免费额度说明
 
-Unified Push 用到 Cloudflare 的三个服务, 全部包含在免费套餐中: 
+HX-HouTiKu 用到 Cloudflare 的三个服务, 全部包含在免费套餐中: 
 
 | 服务 | 是什么 | 免费额度 | 够用吗 |
 |------|--------|----------|--------|
@@ -415,7 +415,7 @@ pip install unified-push
 # 发一条测试消息
 python -c "
 from unified_push import push
-push('🎉 部署成功', '恭喜! Unified Push 已经配置完成。', priority='high', group='test')
+push('🎉 部署成功', '恭喜! HX-HouTiKu 已经配置完成。', priority='high', group='test')
 "
 ```
 
@@ -447,48 +447,120 @@ push('🎉 部署成功', '恭喜! Unified Push 已经配置完成。', priority
 
 ---
 
-## 可选: GitHub 自动部署
+## 可选: GitHub Actions 自动部署（推荐）
 
-如果你把代码推到 GitHub, 可以用 GitHub Actions 自动部署: 
+项目已内置 3 条 GitHub Actions 流水线，配置好 Secrets 后，push 到 main 就自动部署。
 
-### Workers 自动部署
+### 流水线一览
 
-```yaml
-# .github/workflows/deploy-worker.yml
-name: Deploy Worker
-on:
-  push:
-    branches: [main]
-    paths: [worker/**]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: cd worker && pnpm install
-      - run: cd worker && npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+```
+.github/workflows/
+├── deploy-worker.yml     # 🚀 后端：worker/ 变更时自动部署 Worker
+├── deploy-frontend.yml   # 🌐 前端：frontend/ 变更时自动构建 PWA 并部署到 Pages
+└── ci.yml                # 🔍 检查：所有 push/PR 运行类型检查 + 构建验证
 ```
 
-### Pages 自动部署
+| 流水线 | 触发条件 | 做的事情 |
+|--------|----------|----------|
+| **部署后端** | push 到 main，`worker/` 有变更 | pnpm install → 类型检查 → wrangler deploy |
+| **部署前端** | push 到 main，`frontend/` 有变更 | pnpm install → 类型检查 → pnpm build → pages deploy |
+| **CI 检查** | 所有 push + PR | 后端类型检查 + 前端类型检查+构建 + SDK 包构建 |
 
-更简单的方式: 在 Cloudflare Pages 中直接连接 GitHub 仓库: 
+> **Web 端 + 手机端是同一次构建**：本项目是 PWA，构建产物同时支持：
+> - 🖥️ 浏览器直接访问（Web 端）
+> - 📱 手机浏览器"添加到主屏幕"后全屏运行（等同原生 App）
+
+### 第 1 步: 获取 Cloudflare API Token
+
+1. 打开 https://dash.cloudflare.com/profile/api-tokens
+2. 点击 **Create Token**
+3. 选择 **Edit Cloudflare Workers** 模板
+4. 确认权限包含（如果缺少请手动添加）：
+
+   | 权限范围 | 权限 | 级别 |
+   |---------|------|------|
+   | Account → Cloudflare Workers Scripts | Edit | ✅ 模板自带 |
+   | Account → Cloudflare Pages | Edit | ⚠️ 手动添加 |
+   | Account → D1 | Edit | ⚠️ 手动添加 |
+
+5. **Account Resources** 选择 `All accounts` 或指定你的账号
+6. 点击 **Continue to summary → Create Token**
+7. **复制 Token**（⚠️ 只显示一次，关掉就看不到了！）
+
+### 第 2 步: 获取 Account ID
+
+方法一：URL 里找
+- 打开 https://dash.cloudflare.com/
+- URL 变成 `https://dash.cloudflare.com/abc123def456` 
+- `abc123def456` 就是你的 Account ID
+
+方法二：命令行
+
+```bash
+npx wrangler whoami
+# 输出中的 account_id 就是
+```
+
+### 第 3 步: 配置 GitHub Secrets 和 Variables
+
+打开你的 GitHub 仓库页面：
+
+**配置 Secrets**（`Settings → Secrets and variables → Actions → Secrets`）：
+
+| 名称 | 值 | 说明 |
+|------|-----|------|
+| `CLOUDFLARE_API_TOKEN` | 第 1 步拿到的 Token | 加密存储，日志中不可见 |
+| `CLOUDFLARE_ACCOUNT_ID` | 第 2 步拿到的 ID | 加密存储 |
+
+**配置 Variables**（同一页面，切换到 `Variables` 页签）：
+
+| 名称 | 值 | 说明 |
+|------|-----|------|
+| `VITE_API_BASE` | `https://unified-push-api.xxx.workers.dev` | 后端地址，会编译进前端代码 |
+
+> ⚠️ `VITE_API_BASE` 是 Variable（明文），不是 Secret。
+> 因为前端是静态站，这个值会被打包进 JS 文件中，放 Secret 里也没用。
+
+### 第 4 步: 验证流水线
+
+```bash
+# 随便改点什么，push 到 main
+git add .
+git commit -m "ci: 启用 GitHub Actions 自动部署"
+git push
+```
+
+然后打开 GitHub → **Actions** 页签观察：
+
+- ✅ **绿色对勾** = 部署成功
+- ❌ **红色叉号** = 点进去看日志，常见原因：
+  - `Authentication error` → Token 权限不够或过期
+  - `Account not found` → Account ID 填错了
+  - `Project not found` → 首次用 Pages 需要先手动 `wrangler pages deploy` 创建项目
+
+### 手动触发部署
+
+如果不想改代码也能触发部署：
+
+1. 打开 GitHub → **Actions**
+2. 选择要触发的流水线
+3. 点击 **Run workflow** → 选择分支 → 确认
+
+这在"只改了 Secrets 想验证"的场景下很有用。
+
+### 替代方案: Cloudflare Pages 直连 GitHub
+
+如果你更喜欢 Cloudflare 原生的 Git 集成（不用配 Token），也可以：
 
 1. Dashboard → **Workers & Pages** → 创建 → **Pages** → 连接到 Git
 2. 选择你的仓库
-3. 构建设置: 
+3. 构建设置：
    - **构建命令**: `cd frontend && pnpm install && pnpm build`
    - **输出目录**: `frontend/dist`
    - **环境变量**: 添加 `VITE_API_BASE=https://...`
-4. 每次 push 到 main 分支都会自动部署
+4. 每次 push 到 main 自动部署
+
+> 但这种方式只能管前端，后端 Worker 的自动部署还是需要 GitHub Actions。
 
 ---
 

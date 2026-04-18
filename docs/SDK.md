@@ -1,6 +1,6 @@
 # SDK 参考手册
 
-> 本文档详细介绍 Unified Push 的所有推送方式: Python SDK、CLI 命令行、Shell 脚本、cURL。
+> 本文档详细介绍 HX-HouTiKu 的所有推送方式: Python SDK、CLI 命令行、Shell 脚本、cURL。
 
 ---
 

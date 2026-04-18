@@ -1,4 +1,4 @@
-"""Unified Push — End-to-end encrypted push notification SDK."""
+"""HX-HouTiKu — End-to-end encrypted push notification SDK."""
 
 from unified_push.client import UnifiedPushClient
 from unified_push.models import Priority

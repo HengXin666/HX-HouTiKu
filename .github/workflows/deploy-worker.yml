@@ -1,0 +1,71 @@
+# ============================================================
+#  HX-HouTiKu — Worker 后端自动部署
+#
+#  触发条件：push 到 main 分支，且 worker/ 目录有变更
+#
+#  需要在 GitHub Secrets 中配置：
+#    CLOUDFLARE_API_TOKEN  — Cloudflare API Token
+#    CLOUDFLARE_ACCOUNT_ID — Cloudflare Account ID
+#
+#  获取方式见 README.md "GitHub Actions 自动部署"章节
+# ============================================================
+
+name: 🚀 部署后端 Worker
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch: # 支持手动触发
+
+# 同一时间只允许一个部署，取消排队中的旧任务
+concurrency:
+  group: deploy-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: 🏗️ 构建并部署 Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 📦 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 🟢 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: worker/pnpm-lock.yaml
+
+      - name: 📥 安装依赖
+        working-directory: worker
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔍 类型检查
+        working-directory: worker
+        run: pnpm typecheck
+
+      - name: 🚀 部署到 Cloudflare Workers
+        working-directory: worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: ✅ 部署完成通知
+        if: success()
+        run: echo "🎉 Worker 后端部署成功！"
+
+      - name: ❌ 部署失败通知
+        if: failure()
+        run: echo "💥 Worker 后端部署失败，请检查日志"

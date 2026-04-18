@@ -1,5 +1,5 @@
 -- ============================================================
---  Unified Push — D1 Database Schema
+--  HX-HouTiKu — D1 Database Schema
 -- ============================================================
 
 -- 1. Recipients (stores each user's public key and config)

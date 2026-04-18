@@ -90,7 +90,7 @@ export function SetupWizard() {
               <Shield className="h-10 w-10 text-primary" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight mb-2">
-              欢迎使用 Unified Push
+              欢迎使用 HX-HouTiKu
             </h1>
             <p className="text-muted-foreground mb-8 text-sm leading-relaxed max-w-xs mx-auto">
               端到端加密的统一消息推送平台。你的消息，只有你能看。

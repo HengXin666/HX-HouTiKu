@@ -1,5 +1,5 @@
 # ============================================================
-#  Unified Push — Cloudflare Worker 配置文件
+#  HX-HouTiKu — Cloudflare Worker 配置文件
 #
 #  使用方式：
 #    1. 复制此文件：cp wrangler.example.toml wrangler.toml

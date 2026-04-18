@@ -1,6 +1,6 @@
 # unified-push — Python SDK
 
-End-to-end encrypted push notification SDK for [Unified Push](../../README.md).
+End-to-end encrypted push notification SDK for [HX-HouTiKu](../../README.md).
 
 ## Installation
 

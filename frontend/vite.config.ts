@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons/*.png"],
       manifest: {
-        name: "Unified Push",
-        short_name: "UPush",
+        name: "HX-HouTiKu",
+        short_name: "HouTiKu",
         description: "End-to-end encrypted push notification aggregator",
         theme_color: "#0f172a",
         background_color: "#0f172a",

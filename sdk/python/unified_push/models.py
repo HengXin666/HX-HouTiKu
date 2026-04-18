@@ -1,4 +1,4 @@
-"""Data models for Unified Push SDK."""
+"""Data models for HX-HouTiKu SDK."""
 
 from __future__ import annotations
 

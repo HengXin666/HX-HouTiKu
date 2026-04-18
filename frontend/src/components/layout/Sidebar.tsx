@@ -26,7 +26,7 @@ export function Sidebar({ className }: SidebarProps) {
       {/* Logo */}
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">
         <Shield className="h-6 w-6 text-primary" />
-        <span className="font-semibold tracking-tight">Unified Push</span>
+        <span className="font-semibold tracking-tight">HX-HouTiKu</span>
       </div>
 
       {/* Nav */}

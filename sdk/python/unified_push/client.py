@@ -1,4 +1,4 @@
-"""Unified Push client — encrypts and sends messages."""
+"""HX-HouTiKu client — encrypts and sends messages."""
 
 from __future__ import annotations
 

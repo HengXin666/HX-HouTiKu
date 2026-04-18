@@ -15,7 +15,7 @@ export function Header() {
       <div className="flex h-14 items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold tracking-tight">
-            Unified Push
+            HX-HouTiKu
           </h1>
           {totalUnread > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground">

@@ -35,7 +35,7 @@ export function LockScreen() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
             <Shield className="h-8 w-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Unified Push</h1>
+          <h1 className="text-2xl font-bold tracking-tight">HX-HouTiKu</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             输入主密码解锁消息
           </p>
