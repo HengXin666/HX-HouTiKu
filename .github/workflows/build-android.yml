@@ -108,14 +108,14 @@ jobs:
           sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" app/build.gradle
 
-      # ── 10. 设置 Gradle (自动下载+缓存) ──
+      # ── 10. 设置 Gradle (缓存 wrapper 下载, 避免超时) ──
       - name: 📦 设置 Gradle
         uses: gradle/actions/setup-gradle@v4
 
       # ── 11. 构建 APK ──
       - name: 🔨 构建 APK
         working-directory: frontend/android
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --stacktrace
 
       # ── 12. 签名 Release APK ──
       - name: 🔐 签名 APK
