@@ -50,7 +50,7 @@ async function deriveWrappingKey(
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength),
+      salt: toBuffer(salt),
       iterations: PBKDF2_ITERATIONS,
       hash: "SHA-256",
     },
@@ -93,9 +93,9 @@ export async function unwrapPrivateKey(
   const wrappingKey = await deriveWrappingKey(password, salt);
 
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) },
+    { name: "AES-GCM", iv: toBuffer(iv) },
     wrappingKey,
-    ciphertext.buffer.slice(ciphertext.byteOffset, ciphertext.byteOffset + ciphertext.byteLength)
+    toBuffer(ciphertext)
   );
 
   return new TextDecoder().decode(plaintext);
@@ -120,6 +120,15 @@ export function decryptMessage(
   }
   const plaintext = decrypt(privateKeyHex, ciphertext);
   return JSON.parse(new TextDecoder().decode(plaintext));
+}
+
+// --- Buffer Utilities ---
+
+/** Convert Uint8Array to a plain ArrayBuffer (avoids TS ArrayBufferLike issues). */
+function toBuffer(arr: Uint8Array): ArrayBuffer {
+  return arr.buffer instanceof ArrayBuffer
+    ? arr.buffer
+    : new Uint8Array(arr).buffer as ArrayBuffer;
 }
 
 // --- Hex Utilities ---
