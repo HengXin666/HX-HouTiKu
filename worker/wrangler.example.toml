@@ -1,0 +1,54 @@
+# ============================================================
+#  Unified Push — Cloudflare Worker 配置文件
+#
+#  使用方式：
+#    1. 复制此文件：cp wrangler.example.toml wrangler.toml
+#    2. 替换下面的 database_id 为你自己的值
+#    3. 通过 `wrangler secret put` 设置密钥（不要写在这个文件里）
+#
+#  详细文档：https://developers.cloudflare.com/workers/wrangler/configuration/
+# ============================================================
+
+# Worker 名称，会出现在 URL 中：https://<name>.<your-subdomain>.workers.dev
+name = "unified-push-api"
+
+# 入口文件
+main = "src/index.ts"
+
+# 兼容日期（决定 Workers 运行时 API 的版本）
+compatibility_date = "2024-12-01"
+
+# 定时任务配置
+# Cron 表达式，UTC 时区
+# "0 2 * * *" = 每天凌晨 2:00 (UTC) 执行，用于自动清理过期消息
+[triggers]
+crons = ["0 2 * * *"]
+
+# D1 数据库绑定
+# database_id 通过 `npx wrangler d1 create unified-push` 命令创建后获得
+[[d1_databases]]
+binding = "DB"                        # 代码中通过 env.DB 访问
+database_name = "unified-push"        # 数据库名称
+database_id = "your-database-id-here" # ← 替换为你的 database_id！
+
+# 明文环境变量（非敏感信息）
+[vars]
+ENCRYPTION_CURVE = "secp256k1"  # ECIES 加密使用的椭圆曲线，不要修改
+
+# ============================================================
+#  以下密钥必须通过命令行设置，不要写在配置文件中！
+#  设置方式：
+#
+#    npx wrangler secret put ADMIN_TOKEN
+#    # → 输入管理员令牌（SDK 推送消息时用的 Bearer Token）
+#    # → 推荐格式：sk-unified-push-<随机字符串>
+#
+#    npx wrangler secret put VAPID_PUBLIC_KEY
+#    # → 粘贴 Web Push VAPID 公钥
+#    # → 通过 `npx web-push generate-vapid-keys` 生成
+#
+#    npx wrangler secret put VAPID_PRIVATE_KEY
+#    # → 粘贴 Web Push VAPID 私钥
+#
+#  查看已有密钥列表：npx wrangler secret list
+# ============================================================
