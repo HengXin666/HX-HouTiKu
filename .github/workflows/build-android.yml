@@ -154,7 +154,31 @@ jobs:
           path: ${{ steps.rename.outputs.apk_path }}
           retention-days: 30
 
-      # ── 15. 构建摘要 ──
+      # ── 15. 发布到 GitHub Releases ──
+      - name: 🎉 发布到 GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ github.sha }}
+          name: 📱 Android APK (${{ steps.rename.outputs.apk_name }})
+          files: ${{ steps.rename.outputs.apk_path }}
+          body: |
+            ## 📱 HX-HouTiKu Android APK
+
+            **版本**: `${{ steps.rename.outputs.apk_name }}`
+            **构建时间**: `${{ github.event.head_commit.timestamp }}`
+            **触发者**: `${{ github.actor }}`
+            **提交**: `${{ github.sha }}`
+
+            ### 下载安装
+            1. 下载下方的 `.apk` 文件
+            2. 在 Android 手机上打开，允许"未知来源"安装
+            3. 首次打开按设置向导完成配置
+
+            > ⚠️ 如果提示"不安全的应用"，点击"仍要安装"即可（自签名证书）
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 16. 构建摘要 ──
       - name: 📊 构建摘要
         if: always()
         run: |
