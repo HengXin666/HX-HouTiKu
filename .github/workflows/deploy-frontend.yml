@@ -83,7 +83,11 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy frontend/dist --project-name=hx-houtiku
+          # 首次部署时自动创建项目; --commit-dirty=true 消除 git 警告
+          command: pages deploy frontend/dist --project-name=hx-houtiku --commit-dirty=true
+          preCommands: |
+            # 如果项目不存在则创建（已存在时 create 会报错，用 || true 忽略）
+            wrangler pages project create hx-houtiku --production-branch=main || true
 
       - name: ✅ 部署完成
         if: success()
