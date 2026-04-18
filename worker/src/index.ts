@@ -23,7 +23,7 @@ app.use("*", logger());
 
 // --- Health check ---
 app.get("/", (c) => c.json({
-  name: "unified-push-api",
+  name: "hx-houtiku-api",
   version: "1.0.0",
   status: "ok",
 }));

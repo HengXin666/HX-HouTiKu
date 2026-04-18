@@ -92,8 +92,7 @@ async function sendWebPush(
   sub: PushSubscriptionRow,
   payload: Record<string, unknown>
 ): Promise<void> {
-  // Dynamically import cf-webpush to keep it tree-shakeable
-  const { generatePushHTTPRequest } = await import("cf-webpush");
+  const { generatePushHTTPRequest } = await import("../webpush");
 
   const { headers, body, endpoint } = await generatePushHTTPRequest({
     applicationServerKeys: {
@@ -108,7 +107,7 @@ async function sendWebPush(
         auth: sub.key_auth,
       },
     },
-    adminContact: "mailto:admin@unified-push.dev",
+    adminContact: "mailto:admin@hx-houtiku.dev",
     ttl: 60 * 60, // 1 hour
     urgency: payload.priority === "urgent" ? "high" : "normal",
   });
