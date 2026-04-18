@@ -110,3 +110,34 @@ body {
 .safe-bottom {
   padding-bottom: calc(var(--spacing-safe-bottom) + 1rem);
 }
+
+/* ── Mobile keyboard-safe containers ── */
+
+/*
+ * Lock/Setup screens: use min-height that adapts to visual viewport,
+ * fall back to dvh where visualViewport is unsupported.
+ * This prevents the keyboard from squishing the layout.
+ */
+.lock-screen-container {
+  min-height: 100dvh;
+  min-height: calc(var(--visual-vh, 1dvh) * 100);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * When the keyboard is open, hide the bottom nav to prevent it
+ * from floating above the keyboard and blocking content.
+ */
+.keyboard-open .bottom-nav-bar {
+  transform: translateY(100%);
+  pointer-events: none;
+}
+
+/*
+ * Reduce bottom padding on main content when keyboard is open,
+ * so content can scroll fully into view.
+ */
+.keyboard-open .main-content {
+  padding-bottom: 0.5rem !important;
+}

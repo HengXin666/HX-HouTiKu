@@ -1,5 +1,6 @@
 /**
  * Auth store — manages key state (locked/unlocked), private key in memory.
+ * Supports "remember password" to auto-unlock on next visit.
  */
 
 import { create } from "zustand";
@@ -9,24 +10,27 @@ import {
   unwrapPrivateKey,
   type WrappedKey,
 } from "@/lib/crypto";
-import { saveKeyData, getKeyData, clearKeyData } from "@/lib/db";
+import { saveKeyData, getKeyData, clearKeyData, setPref, getPref } from "@/lib/db";
 
 type AuthStatus = "loading" | "no-keys" | "locked" | "unlocked";
+
+const SAVED_PWD_KEY = "saved-master-password";
 
 interface AuthState {
   status: AuthStatus;
   publicKeyHex: string | null;
-  privateKeyHex: string | null; // only in memory when unlocked
+  privateKeyHex: string | null;
   recipientToken: string | null;
   deviceName: string | null;
+  rememberPassword: boolean;
 
-  // Actions
   initialize: () => Promise<void>;
-  generateKeys: (password: string, deviceName: string) => Promise<string>; // returns publicKeyHex
-  unlock: (password: string) => Promise<void>;
+  generateKeys: (password: string, deviceName: string) => Promise<string>;
+  unlock: (password: string, remember?: boolean) => Promise<void>;
   lock: () => void;
   setRecipientToken: (token: string, recipientId: string) => Promise<void>;
   reset: () => Promise<void>;
+  setRememberPassword: (v: boolean) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -35,6 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   privateKeyHex: null,
   recipientToken: null,
   deviceName: null,
+  rememberPassword: false,
 
   initialize: async () => {
     const keyData = await getKeyData();
@@ -42,6 +47,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ status: "no-keys" });
       return;
     }
+
+    // Try auto-unlock with saved password
+    const savedPwd = await getPref<string>(SAVED_PWD_KEY);
+    if (savedPwd) {
+      try {
+        const privateKeyHex = await unwrapPrivateKey(
+          keyData.wrappedPrivateKey as WrappedKey,
+          savedPwd
+        );
+        set({
+          status: "unlocked",
+          publicKeyHex: keyData.publicKeyHex,
+          privateKeyHex,
+          recipientToken: keyData.recipientToken ?? null,
+          deviceName: keyData.deviceName ?? null,
+          rememberPassword: true,
+        });
+        return;
+      } catch {
+        // Saved password invalid (maybe keys were regenerated), clear it
+        await setPref(SAVED_PWD_KEY, undefined);
+      }
+    }
+
     set({
       status: "locked",
       publicKeyHex: keyData.publicKeyHex,
@@ -60,17 +89,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       deviceName,
     });
 
+    // Default: remember password for new setups (no reason to annoy user)
+    await setPref(SAVED_PWD_KEY, password);
+
     set({
       status: "unlocked",
       publicKeyHex,
       privateKeyHex,
       deviceName,
+      rememberPassword: true,
     });
 
     return publicKeyHex;
   },
 
-  unlock: async (password) => {
+  unlock: async (password, remember = true) => {
     const keyData = await getKeyData();
     if (!keyData) throw new Error("No keys found");
 
@@ -79,12 +112,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       password
     );
 
+    if (remember) {
+      await setPref(SAVED_PWD_KEY, password);
+    }
+
     set({
       status: "unlocked",
       privateKeyHex,
       publicKeyHex: keyData.publicKeyHex,
       recipientToken: keyData.recipientToken ?? null,
       deviceName: keyData.deviceName ?? null,
+      rememberPassword: remember,
     });
   },
 
@@ -105,14 +143,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ recipientToken: token });
   },
 
+  setRememberPassword: async (v: boolean) => {
+    if (!v) {
+      await setPref(SAVED_PWD_KEY, undefined);
+    }
+    set({ rememberPassword: v });
+  },
+
   reset: async () => {
     await clearKeyData();
+    await setPref(SAVED_PWD_KEY, undefined);
     set({
       status: "no-keys",
       publicKeyHex: null,
       privateKeyHex: null,
       recipientToken: null,
       deviceName: null,
+      rememberPassword: false,
     });
   },
 }));

@@ -1,14 +1,20 @@
-import { Search, Settings, Lock } from "lucide-react";
+import { Search, Settings, Lock, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 export function Header() {
   const lock = useAuthStore((s) => s.lock);
   const totalUnread = useMessageStore((s) => s.totalUnread);
   const [showSearch, setShowSearch] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const closeSearch = () => {
+    setShowSearch(false);
+    inputRef.current?.blur();
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
@@ -53,14 +59,22 @@ export function Header() {
 
       {/* Search bar (expandable) */}
       {showSearch && (
-        <div className="border-t border-border px-4 py-2 animate-[slide-up_0.2s_ease-out]">
+        <div className="border-t border-border px-4 py-2 animate-[slide-up_0.2s_ease-out] flex items-center gap-2">
           <input
+            ref={inputRef}
             type="search"
             placeholder="搜索消息..."
             autoFocus
-            className="w-full rounded-lg bg-input px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            onBlur={() => setShowSearch(false)}
+            enterKeyHint="search"
+            className="flex-1 rounded-lg bg-input px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           />
+          <button
+            onClick={closeSearch}
+            className="shrink-0 rounded-lg p-2 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="关闭搜索"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
     </header>

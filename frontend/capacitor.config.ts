@@ -36,10 +36,12 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"],
     },
-    // 键盘行为
+    // 键盘行为 — 用 "none" 避免系统自动 resize body 导致布局错乱，
+    // 改用 visualViewport API 在 JS 层处理。
     Keyboard: {
-      resize: "body",
-      resizeOnFullScreen: true,
+      resize: "none",
+      resizeOnFullScreen: false,
+      style: "DARK",
     },
   },
 };

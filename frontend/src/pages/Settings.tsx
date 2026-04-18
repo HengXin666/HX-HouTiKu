@@ -22,6 +22,8 @@ export function Settings() {
   const deviceName = useAuthStore((s) => s.deviceName);
   const lock = useAuthStore((s) => s.lock);
   const resetAuth = useAuthStore((s) => s.reset);
+  const rememberPassword = useAuthStore((s) => s.rememberPassword);
+  const setRememberPassword = useAuthStore((s) => s.setRememberPassword);
 
   const theme = useSettingsStore((s) => s.theme);
   const fontSize = useSettingsStore((s) => s.fontSize);
@@ -77,6 +79,23 @@ export function Settings() {
             </button>
           }
         />
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+          <div>
+            <span className="text-sm">自动解锁</span>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              记住密码，打开 App 时跳过输入
+            </p>
+          </div>
+          <label className="relative inline-flex cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rememberPassword}
+              onChange={(e) => setRememberPassword(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-10 h-5.5 bg-muted rounded-full peer peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4.5 after:w-4.5 after:transition-transform peer-checked:after:translate-x-[18px]" />
+          </label>
+        </div>
       </SettingsSection>
 
       {/* Appearance */}

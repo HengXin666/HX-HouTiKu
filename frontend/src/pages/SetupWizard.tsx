@@ -68,7 +68,7 @@ export function SetupWizard() {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-6">
+    <div className="lock-screen-container flex items-center justify-center bg-background px-6 py-8">
       <div className="w-full max-w-md">
         {/* Progress */}
         <div className="mb-8 flex items-center justify-center gap-2">
@@ -118,13 +118,21 @@ export function SetupWizard() {
         {/* Step: Password */}
         {step === "password" && (
           <div className="animate-[fade-in_0.3s_ease-out]">
-            <div className="text-center mb-8">
+            <div className="text-center mb-6">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
                 <Lock className="h-7 w-7 text-primary" />
               </div>
-              <h2 className="text-xl font-bold">设置主密码</h2>
+              <h2 className="text-xl font-bold">创建主密码</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                用于加密你的私钥，务必牢记
+                这是你的 App 解锁密码，请牢记
+              </p>
+            </div>
+
+            {/* Explanation */}
+            <div className="mb-5 rounded-xl bg-muted/50 border border-border px-4 py-3">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                🔐 主密码用于保护你的加密私钥。每次打开 App 时需要输入（也可以选择记住密码跳过）。
+                <strong className="text-foreground">请设一个你记得住的密码</strong>，比如常用的个人密码。
               </p>
             </div>
 
@@ -136,8 +144,9 @@ export function SetupWizard() {
                   setPassword(e.target.value);
                   setError(null);
                 }}
-                placeholder="输入主密码（≥8位）"
+                placeholder="设置你的主密码（至少 8 位）"
                 autoFocus
+                enterKeyHint="next"
                 className="w-full rounded-xl border border-border bg-input px-4 py-3.5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
 
@@ -180,7 +189,8 @@ export function SetupWizard() {
                   setConfirmPwd(e.target.value);
                   setError(null);
                 }}
-                placeholder="确认密码"
+                placeholder="再输入一次确认密码"
+                enterKeyHint="done"
                 className="w-full rounded-xl border border-border bg-input px-4 py-3.5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
 
