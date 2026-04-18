@@ -22,7 +22,7 @@ export interface KeyPair {
 export function generateKeyPair(): KeyPair {
   const sk = new PrivateKey();
   return {
-    privateKeyHex: sk.secret.toString("hex"),
+    privateKeyHex: sk.toHex(),
     publicKeyHex: sk.publicKey.toHex(),
   };
 }
@@ -48,7 +48,12 @@ async function deriveWrappingKey(
   );
 
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    {
+      name: "PBKDF2",
+      salt: salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength),
+      iterations: PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
     keyMaterial,
     { name: "AES-GCM", length: 256 },
     false,
@@ -88,9 +93,9 @@ export async function unwrapPrivateKey(
   const wrappingKey = await deriveWrappingKey(password, salt);
 
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) },
     wrappingKey,
-    ciphertext
+    ciphertext.buffer.slice(ciphertext.byteOffset, ciphertext.byteOffset + ciphertext.byteLength)
   );
 
   return new TextDecoder().decode(plaintext);
@@ -108,9 +113,13 @@ export function decryptMessage(
   privateKeyHex: string,
   encryptedBase64: string
 ): DecryptedMessage {
-  const ciphertext = Buffer.from(encryptedBase64, "base64");
+  const binaryStr = atob(encryptedBase64);
+  const ciphertext = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    ciphertext[i] = binaryStr.charCodeAt(i);
+  }
   const plaintext = decrypt(privateKeyHex, ciphertext);
-  return JSON.parse(plaintext.toString("utf-8"));
+  return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
 // --- Hex Utilities ---

@@ -24,7 +24,8 @@ self.addEventListener("push", (event) => {
   const group = data.group ?? "general";
 
   // Priority → notification config
-  const configs: Record<string, NotificationOptions> = {
+  type NotifConfig = NotificationOptions & { vibrate?: number[] };
+  const configs: Record<string, NotifConfig> = {
     urgent: {
       icon: "/icons/icon-192x192.png",
       badge: "/icons/icon-192x192.png",
@@ -73,7 +74,7 @@ self.addEventListener("push", (event) => {
       body,
       data: { url: `/?focus=${data.id}` },
       ...notifConfig,
-    })
+    } as NotificationOptions)
   );
 });
 

@@ -15,7 +15,7 @@ export function useMessages() {
   const loadCached = useMessageStore((s) => s.loadCached);
   const messages = useMessageStore((s) => s.messages);
   const loading = useMessageStore((s) => s.loading);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const refresh = useCallback(() => {
     if (!recipientToken || !privateKeyHex) return;

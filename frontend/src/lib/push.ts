@@ -31,9 +31,13 @@ export async function registerPushSubscription(
     let subscription = await registration.pushManager.getSubscription();
 
     if (!subscription) {
+      const serverKey = urlBase64ToUint8Array(config.vapid_public_key);
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(config.vapid_public_key),
+        applicationServerKey: serverKey.buffer.slice(
+          serverKey.byteOffset,
+          serverKey.byteOffset + serverKey.byteLength
+        ),
       });
     }
 
