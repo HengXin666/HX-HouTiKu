@@ -68,6 +68,98 @@ export function setNativePushHandler(handler: NativePushHandler): void {
   nativePushHandler = handler;
 }
 
+/**
+ * Create Android notification channels (required for Android 8+).
+ * Different channels allow per-priority vibration/sound/importance.
+ */
+async function ensureNotificationChannels(): Promise<void> {
+  try {
+    const { LocalNotifications } = await import("@capacitor/local-notifications");
+    await LocalNotifications.requestPermissions();
+
+    // Create channels for each priority level
+    await LocalNotifications.createChannel({
+      id: "hx_push_urgent",
+      name: "紧急消息",
+      description: "紧急消息 — 持续震动、锁屏全屏显示",
+      importance: 5, // MAX
+      visibility: 1, // PUBLIC
+      vibration: true,
+      sound: "default",
+      lights: true,
+    });
+
+    await LocalNotifications.createChannel({
+      id: "hx_push_high",
+      name: "重要消息",
+      description: "重要消息 — 震动、弹窗",
+      importance: 4, // HIGH
+      visibility: 1,
+      vibration: true,
+      sound: "default",
+      lights: true,
+    });
+
+    await LocalNotifications.createChannel({
+      id: "hx_push_default",
+      name: "普通消息",
+      description: "普通消息 — 静默通知",
+      importance: 3, // DEFAULT
+      visibility: 0, // PRIVATE
+      vibration: true,
+      sound: "default",
+    });
+  } catch (err) {
+    console.warn("Failed to create notification channels:", err);
+  }
+}
+
+/** Monotonically increasing ID for local notifications. */
+let localNotifId = Math.floor(Date.now() / 1000);
+
+/**
+ * Show a local notification in the system tray when a push arrives
+ * while the app is in the foreground. Without this, Android silently
+ * swallows FCM notifications when the app is visible.
+ */
+async function showForegroundNotification(
+  priority: string,
+  group: string,
+  messageId?: string,
+): Promise<void> {
+  if (priority === "low" || priority === "debug") return;
+
+  try {
+    const { LocalNotifications } = await import("@capacitor/local-notifications");
+
+    const priorityLabel =
+      priority === "urgent" ? "紧急" : priority === "high" ? "重要" : "新";
+
+    const channelId =
+      priority === "urgent"
+        ? "hx_push_urgent"
+        : priority === "high"
+          ? "hx_push_high"
+          : "hx_push_default";
+
+    await LocalNotifications.schedule({
+      notifications: [
+        {
+          id: ++localNotifId,
+          title: `${group} · ${priorityLabel}消息`,
+          body: "点击查看详情",
+          channelId,
+          extra: { id: messageId },
+          smallIcon: "ic_notification",
+          largeIcon: "ic_launcher",
+        },
+      ],
+    });
+  } catch (err) {
+    console.warn("Failed to show foreground notification:", err);
+  }
+}
+
 async function registerNativePush(recipientToken: string): Promise<boolean> {
   if (!isNativePlatform) return false;
 
@@ -75,6 +167,9 @@ async function registerNativePush(recipientToken: string): Promise<boolean> {
     const { PushNotifications } = await import(
       "@capacitor/push-notifications"
     );
+
+    // Create notification channels first (Android 8+ requirement)
+    await ensureNotificationChannels();
 
     // Request permission
     const permResult = await PushNotifications.requestPermissions();
@@ -94,7 +189,6 @@ async function registerNativePush(recipientToken: string): Promise<boolean> {
         console.log("FCM token:", token.value);
         try {
           // Send FCM token to our backend as a push subscription
-          // The backend stores it the same way, but we indicate it's a native token
           const apiBase = await getApiBase();
           const res = await fetch(`${apiBase}/api/subscribe`, {
             method: "POST",
@@ -132,12 +226,15 @@ async function registerNativePush(recipientToken: string): Promise<boolean> {
       });
 
       // Handle received notifications (foreground)
+      // When the app is in the foreground, FCM delivers data-only silently.
+      // We must show a local notification manually to appear in the status bar.
       PushNotifications.addListener(
         "pushNotificationReceived",
         (notification) => {
-          console.log("Native push received:", notification);
+          console.log("Native push received (foreground):", notification);
           const data = notification.data ?? {};
           const priority = data.priority ?? "default";
+          const group = data.group ?? "general";
 
           // Vibrate based on priority
           if (priority === "urgent") {
@@ -148,11 +245,14 @@ async function registerNativePush(recipientToken: string): Promise<boolean> {
             vibrate([100]);
           }
 
+          // Show in system status bar / notification tray even while app is open
+          showForegroundNotification(priority, group, data.id);
+
           nativePushHandler?.(data);
         },
       );
 
-      // Handle notification tap (opens specific message)
+      // Handle notification tap (from FCM notification OR local notification)
       PushNotifications.addListener(
         "pushNotificationActionPerformed",
         (action) => {
@@ -162,6 +262,19 @@ async function registerNativePush(recipientToken: string): Promise<boolean> {
           }
         },
       );
+
+      // Also handle local notification taps
+      import("@capacitor/local-notifications").then(({ LocalNotifications }) => {
+        LocalNotifications.addListener(
+          "localNotificationActionPerformed",
+          (action) => {
+            const extra = action.notification.extra ?? {};
+            if (extra.id) {
+              window.location.hash = `/?focus=${extra.id}`;
+            }
+          },
+        );
+      }).catch(() => {});
 
       // Timeout fallback — don't hang forever
       setTimeout(() => {

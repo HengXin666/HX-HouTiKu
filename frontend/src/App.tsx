@@ -10,13 +10,14 @@ import { GroupView } from "@/pages/GroupView";
 import { MessageDetail } from "@/pages/MessageDetail";
 import { Settings } from "@/pages/Settings";
 import { AppShell } from "@/components/layout/AppShell";
-import { setNativePushHandler } from "@/lib/push";
-import { isNativePlatform } from "@/lib/platform";
+import { setNativePushHandler, registerPushSubscription } from "@/lib/push";
+import { isNativePlatform, hasWebPush } from "@/lib/platform";
 
 export function App() {
   const status = useAuthStore((s) => s.status);
   const initAuth = useAuthStore((s) => s.initialize);
   const initSettings = useSettingsStore((s) => s.initialize);
+  const pushEnabled = useSettingsStore((s) => s.pushEnabled);
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
   const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
@@ -35,6 +36,19 @@ export function App() {
       }
     });
   }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
+
+  // Auto-register Web Push when unlocked + pushEnabled + permission already granted
+  useEffect(() => {
+    if (
+      status !== "unlocked" ||
+      !recipientToken ||
+      !pushEnabled
+    ) return;
+
+    if (isNativePlatform || (hasWebPush && Notification.permission === "granted")) {
+      registerPushSubscription(recipientToken).catch(console.error);
+    }
+  }, [status, recipientToken, pushEnabled]);
 
   if (status === "loading") {
     return <SplashScreen />;

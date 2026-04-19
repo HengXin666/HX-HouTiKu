@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Switch, Dialog, Toast } from "antd-mobile";
 import {
   User,
@@ -24,7 +24,8 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { resetAll, clearMessages } from "@/lib/db";
 import { invalidateApiBaseCache } from "@/lib/api";
 import { copyToClipboard } from "@/lib/utils";
-import { isNativePlatform, hasWebNotification } from "@/lib/platform";
+import { isNativePlatform, hasWebNotification, hasWebPush } from "@/lib/platform";
+import { usePush } from "@/hooks/use-push";
 
 export function Settings() {
   const publicKeyHex = useAuthStore((s) => s.publicKeyHex);
@@ -48,6 +49,13 @@ export function Settings() {
   const [apiInput, setApiInput] = useState(apiBase);
   const [editingToken, setEditingToken] = useState(false);
   const [editingApi, setEditingApi] = useState(false);
+
+  const { pushEnabled, enable: enablePush, disable: disablePush, loading: pushLoading } = usePush();
+
+  // Dialog states for clear cache and full reset (declarative, React 19 compatible)
+  const [clearCacheVisible, setClearCacheVisible] = useState(false);
+  const [resetVisible, setResetVisible] = useState(false);
+  const [resetConfirmVisible, setResetConfirmVisible] = useState(false);
 
   const handleCopyKey = async () => {
     if (!publicKeyHex) return;
@@ -83,26 +91,19 @@ export function Settings() {
     });
   };
 
-  const handleClearCache = async () => {
-    const result = await Dialog.confirm({ content: "确定清除本地消息缓存？" });
-    if (!result) return;
+  const handleClearCache = useCallback(async () => {
     await clearMessages();
+    setClearCacheVisible(false);
     window.location.reload();
-  };
+  }, []);
 
-  const handleFullReset = async () => {
-    const r1 = await Dialog.confirm({
-      content: "⚠️ 确定重置所有数据？密钥将永久丢失，无法恢复！",
-    });
-    if (!r1) return;
-    const r2 = await Dialog.confirm({ content: "最后确认：此操作不可撤销。" });
-    if (!r2) return;
+  const handleFullReset = useCallback(async () => {
+    setResetConfirmVisible(false);
     await resetAll();
     invalidateApiBaseCache();
     await resetAuth();
-    // Force full reload to clear all in-memory caches (Zustand, API cache, etc.)
     window.location.replace("/");
-  };
+  }, [resetAuth]);
 
   return (
     <div className="settings-page">
@@ -344,17 +345,45 @@ export function Settings() {
               <Bell />
             </div>
             <div className="settings-item-body">
-              <div className="settings-item-label">Web Push</div>
+              <div className="settings-item-label">消息推送</div>
+              <div className="settings-item-desc">
+                {isNativePlatform
+                  ? "使用原生推送 (FCM/APNs)"
+                  : hasWebPush
+                    ? Notification.permission === "denied"
+                      ? "浏览器已禁止通知，请在设置中允许"
+                      : pushEnabled
+                        ? "已订阅 Web Push 通知"
+                        : "开启后接收实时推送"
+                    : !hasWebNotification
+                      ? "当前浏览器不支持通知"
+                      : "当前环境不支持 Web Push"}
+              </div>
             </div>
-            <span className="settings-item-value" style={{ fontFamily: "inherit" }}>
-              {isNativePlatform
-                ? "📱 原生推送"
-                : hasWebNotification
-                  ? Notification.permission === "granted"
-                    ? "✅ 已开启"
-                    : "未开启"
-                  : "不支持"}
-            </span>
+            <div className="settings-item-action">
+              {(hasWebPush || isNativePlatform) && Notification.permission !== "denied" && (
+                <Switch
+                  checked={pushEnabled}
+                  loading={pushLoading}
+                  onChange={async (checked) => {
+                    if (checked) {
+                      const ok = await enablePush();
+                      if (!ok) {
+                        Toast.show({ content: "推送注册失败，请检查权限", position: "bottom" });
+                      } else {
+                        Toast.show({ content: "推送已开启", position: "bottom" });
+                      }
+                    } else {
+                      await disablePush();
+                      Toast.show({ content: "推送已关闭", position: "bottom" });
+                    }
+                  }}
+                  style={
+                    { "--checked-color": "var(--color-primary)" } as React.CSSProperties
+                  }
+                />
+              )}
+            </div>
           </div>
         </div>
         <div className="settings-group-footer">
@@ -367,7 +396,7 @@ export function Settings() {
         <div className="settings-group-label">数据</div>
         <div className="settings-card">
           <button
-            onClick={handleClearCache}
+            onClick={() => setClearCacheVisible(true)}
             className="settings-item settings-item--btn"
           >
             <div className="settings-item-icon settings-item-icon--slate">
@@ -380,7 +409,7 @@ export function Settings() {
           </button>
 
           <button
-            onClick={handleFullReset}
+            onClick={() => setResetVisible(true)}
             className="settings-item settings-item--btn settings-item--destructive"
           >
             <div className="settings-item-icon settings-item-icon--red">
@@ -406,6 +435,55 @@ export function Settings() {
           GitHub
         </a>
       </div>
+
+      {/* ── Declarative Dialogs (React 19 compatible) ── */}
+      <Dialog
+        visible={clearCacheVisible}
+        content="确定清除本地消息缓存？"
+        closeOnAction
+        onClose={() => setClearCacheVisible(false)}
+        actions={[
+          [
+            { key: "cancel", text: "取消", onClick: () => setClearCacheVisible(false) },
+            { key: "confirm", text: "确定", bold: true, danger: true, onClick: handleClearCache },
+          ],
+        ]}
+      />
+
+      <Dialog
+        visible={resetVisible}
+        content="⚠️ 确定重置所有数据？密钥将永久丢失，无法恢复！"
+        closeOnAction
+        onClose={() => setResetVisible(false)}
+        actions={[
+          [
+            { key: "cancel", text: "取消", onClick: () => setResetVisible(false) },
+            {
+              key: "confirm",
+              text: "确定",
+              bold: true,
+              danger: true,
+              onClick: () => {
+                setResetVisible(false);
+                setResetConfirmVisible(true);
+              },
+            },
+          ],
+        ]}
+      />
+
+      <Dialog
+        visible={resetConfirmVisible}
+        content="最后确认：此操作不可撤销。"
+        closeOnAction
+        onClose={() => setResetConfirmVisible(false)}
+        actions={[
+          [
+            { key: "cancel", text: "取消", onClick: () => setResetConfirmVisible(false) },
+            { key: "confirm", text: "不可逆重置", bold: true, danger: true, onClick: handleFullReset },
+          ],
+        ]}
+      />
     </div>
   );
 }

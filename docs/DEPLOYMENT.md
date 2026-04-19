@@ -219,6 +219,11 @@ npx wrangler secret put VAPID_PUBLIC_KEY
 # 设置 VAPID 私钥
 npx wrangler secret put VAPID_PRIVATE_KEY
 # 粘贴上一步生成的 Private Key
+
+# [可选] 设置 FCM 服务账号 (仅 Android 原生 App 需要)
+# 详见 docs/ANDROID.md
+npx wrangler secret put FCM_SERVICE_ACCOUNT
+# 粘贴 Firebase 服务账号 JSON 的 Base64 编码
 ```
 
 > **ADMIN_TOKEN 怎么选? **
@@ -514,6 +519,7 @@ npx wrangler whoami
 |------|-----|------|
 | `CLOUDFLARE_API_TOKEN` | 第 1 步拿到的 Token | 加密存储，日志中不可见 |
 | `CLOUDFLARE_ACCOUNT_ID` | 第 2 步拿到的 ID | 加密存储 |
+| `GOOGLE_SERVICES_JSON` | Firebase `google-services.json` 的 Base64 | Android 原生推送必需，详见 [Android App](./ANDROID.md) |
 
 **配置 Variables**（同一页面，切换到 `Variables` 页签）：
 

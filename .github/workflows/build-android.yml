@@ -10,6 +10,7 @@
 #    ANDROID_KEYSTORE_PASSWORD — 密钥库密码
 #    ANDROID_KEY_ALIAS — 签名密钥别名
 #    ANDROID_KEY_PASSWORD — 签名密钥密码
+#    GOOGLE_SERVICES_JSON — Firebase google-services.json (Base64 编码，FCM 推送必需)
 #
 #  需要在 GitHub Variables 中配置:
 #    VITE_API_BASE — 后端 Worker URL
@@ -88,6 +89,14 @@ jobs:
           fi
           # 同步 Web 资产到原生项目
           npx cap sync android
+
+      # ── 8.5. 注入 Firebase 配置 (FCM 推送必需) ──
+      - name: 🔥 注入 google-services.json
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+        working-directory: frontend/android/app
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > google-services.json
+          echo "✅ google-services.json 已写入"
 
       # ── 9. 设置版本号 ──
       - name: 🏷️ 设置版本号

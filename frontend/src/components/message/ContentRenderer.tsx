@@ -1,3 +1,4 @@
+import { useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -7,6 +8,17 @@ import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { FileText, Code2, Globe, FileJson } from "lucide-react";
 
 SyntaxHighlighter.registerLanguage("json", json);
+
+/**
+ * Rewrite http:// image URLs to https:// to avoid mixed-content blocking.
+ * Most CDNs (including Bilibili's hdslb.com) support HTTPS.
+ */
+function upgradeImageUrls(html: string): string {
+  return html.replace(
+    /(<img\b[^>]*\bsrc\s*=\s*["'])http:\/\//gi,
+    "$1https://"
+  );
+}
 
 export type ContentFormat = "auto" | "markdown" | "html" | "json" | "text";
 
@@ -191,6 +203,10 @@ function MarkdownRenderer({ content }: { content: string }) {
               </code>
             );
           },
+          img({ src, alt, ...props }) {
+            const safeSrc = src?.replace(/^http:\/\//, "https://");
+            return <img src={safeSrc} alt={alt ?? ""} loading="lazy" {...props} />;
+          },
         }}
       >
         {content}
@@ -199,13 +215,79 @@ function MarkdownRenderer({ content }: { content: string }) {
   );
 }
 
+/**
+ * Shadow DOM styles for isolated HTML rendering.
+ * These mimic the host page's msg-html styling without inheriting global resets.
+ */
+const SHADOW_STYLES = `
+  :host {
+    display: block;
+    line-height: 1.75;
+    word-break: break-word;
+    font-size: 1rem;
+    color: inherit;
+    font-family: inherit;
+  }
+  /* Undo the host page's * { margin:0; padding:0 } so HTML content renders naturally */
+  *, *::before, *::after { box-sizing: border-box; }
+  img { max-width: 100%; height: auto; border-radius: 12px; }
+  a { color: #1d9bf0; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1, h2, h3, h4, h5, h6 { margin: 0.75em 0 0.5em; font-weight: 700; }
+  p { margin: 0 0 0.75em; }
+  ul, ol { padding-left: 1.5em; margin-bottom: 0.75em; }
+  li { margin-bottom: 0.25em; }
+  blockquote {
+    border-left: 3px solid #1d9bf0;
+    padding-left: 1em;
+    margin: 0.75em 0;
+    opacity: 0.85;
+  }
+  pre {
+    background: rgba(0,0,0,0.15);
+    border-radius: 12px;
+    padding: 1em;
+    overflow-x: auto;
+    margin: 0.75em 0;
+  }
+  code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+    font-size: 0.9em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75em 0;
+    font-size: 0.875em;
+  }
+  th, td {
+    border: 1px solid rgba(128,128,128,0.3);
+    padding: 0.5em 0.75em;
+    text-align: left;
+  }
+  th { font-weight: 600; background: rgba(0,0,0,0.1); }
+`;
+
 function HtmlRenderer({ content }: { content: string }) {
-  return (
-    <div
-      className="msg-html"
-      dangerouslySetInnerHTML={{ __html: content }}
-    />
-  );
+  const hostRef = useRef<HTMLDivElement>(null);
+  const shadowRef = useRef<ShadowRoot | null>(null);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    // Attach shadow root once
+    if (!shadowRef.current) {
+      shadowRef.current = host.attachShadow({ mode: "open" });
+    }
+    const shadow = shadowRef.current;
+
+    // Upgrade http→https for images, then inject into shadow DOM
+    const safeHtml = upgradeImageUrls(content);
+    shadow.innerHTML = `<style>${SHADOW_STYLES}</style>${safeHtml}`;
+  }, [content]);
+
+  return <div ref={hostRef} className="msg-html" />;
 }
 
 function JsonRenderer({ content }: { content: string }) {

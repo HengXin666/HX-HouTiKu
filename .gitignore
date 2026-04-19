@@ -37,5 +37,10 @@ frontend/ios/
 *.jks
 keystore-base64.txt
 
+# Firebase / FCM (敏感凭证，绝对不能提交!)
+google-services.json
+*-firebase-adminsdk*.json
+firebase-service-account*.json
+
 # Codebuddy
 .codebuddy/

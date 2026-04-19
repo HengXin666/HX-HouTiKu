@@ -9,6 +9,7 @@ export function LockScreen() {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resetVisible, setResetVisible] = useState(false);
   const unlock = useAuthStore((s) => s.unlock);
   const reset = useAuthStore((s) => s.reset);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,14 +42,8 @@ export function LockScreen() {
     }
   };
 
-  const handleReset = async () => {
-    const result = await Dialog.confirm({
-      content:
-        "⚠️ 确定要重置所有数据吗？\n\n你的加密密钥将永久丢失，之前的消息将无法解密。\n\n重置后需要重新设置密码和密钥。",
-    });
-    if (result) {
-      reset();
-    }
+  const handleReset = () => {
+    setResetVisible(true);
   };
 
   return (
@@ -141,6 +136,31 @@ export function LockScreen() {
           忘记密码？重置设备重新开始
         </button>
       </div>
+
+      {/* Declarative Reset Dialog (React 19 compatible) */}
+      <Dialog
+        visible={resetVisible}
+        content={
+          "⚠️ 确定要重置所有数据吗？\n\n你的加密密钥将永久丢失，之前的消息将无法解密。\n\n重置后需要重新设置密码和密钥。"
+        }
+        closeOnAction
+        onClose={() => setResetVisible(false)}
+        actions={[
+          [
+            { key: "cancel", text: "取消", onClick: () => setResetVisible(false) },
+            {
+              key: "confirm",
+              text: "重置",
+              bold: true,
+              danger: true,
+              onClick: () => {
+                setResetVisible(false);
+                reset();
+              },
+            },
+          ],
+        ]}
+      />
     </div>
   );
 }

@@ -4,6 +4,8 @@ export interface Env {
   VAPID_PRIVATE_KEY: string;
   VAPID_PUBLIC_KEY: string;
   ENCRYPTION_CURVE: string;
+  /** Firebase Cloud Messaging — service account JSON (base64-encoded). Required for Android native push. */
+  FCM_SERVICE_ACCOUNT?: string;
 }
 
 // --- DB Row Types ---

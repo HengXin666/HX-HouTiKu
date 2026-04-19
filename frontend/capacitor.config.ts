@@ -32,9 +32,14 @@ const config: CapacitorConfig = {
       backgroundColor: "#0f172a",
       showSpinner: false,
     },
-    // 推送通知（复用 Web Push 逻辑，原生层仅做权限桥接）
+    // 推送通知 (FCM) — 后台/锁屏通知由 FCM notification payload 自动处理
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"],
+    },
+    // 本地通知 — 用于前台时在状态栏显示推送通知
+    LocalNotifications: {
+      smallIcon: "ic_notification",
+      iconColor: "#1d9bf0",
     },
     // 键盘行为 — 用 "none" 避免系统自动 resize body 导致布局错乱，
     // 改用 visualViewport API 在 JS 层处理。

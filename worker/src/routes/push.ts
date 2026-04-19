@@ -84,7 +84,13 @@ app.post("/", authPushToken(), async (c) => {
 
       for (const sub of subs.results) {
         try {
-          await sendWebPush(c.env, sub, pushPayload);
+          if (sub.endpoint.startsWith("fcm://")) {
+            // Native Android — send via FCM HTTP v1 API
+            await sendFcmPush(c.env, sub, pushPayload, priority, group);
+          } else {
+            // Standard Web Push (VAPID)
+            await sendWebPush(c.env, sub, pushPayload);
+          }
         } catch {
           // Subscription expired — clean it up
           await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
@@ -101,6 +107,29 @@ app.post("/", authPushToken(), async (c) => {
 
   return c.json({ status: "ok", id: messageId, pushed_to: pushedTo, web_push_sent: webPushSent }, 201);
 });
+
+async function sendFcmPush(
+  env: Env,
+  sub: PushSubscriptionRow,
+  payload: string,
+  priority: string,
+  group: string,
+): Promise<void> {
+  if (!env.FCM_SERVICE_ACCOUNT) {
+    console.warn("FCM_SERVICE_ACCOUNT not configured — skipping native push");
+    return;
+  }
+
+  const { sendFcmPush: fcmSend } = await import("../fcm");
+  const deviceToken = sub.endpoint.replace("fcm://", "");
+
+  await fcmSend(env.FCM_SERVICE_ACCOUNT, {
+    deviceToken,
+    payload,
+    priority,
+    group,
+  });
+}
 
 async function sendWebPush(
   env: Env,
