@@ -41,6 +41,8 @@ class KeyManager @Inject constructor(
         private const val KEY_PUBLIC = "public_key"
         private const val KEY_RECIPIENT_TOKEN = "recipient_token"
         private const val KEY_RECIPIENT_NAME = "recipient_name"
+        private const val KEY_REMEMBER_PASSWORD = "remember_password"
+        private const val KEY_SAVED_PASSWORD = "saved_password"
     }
 
     /**
@@ -189,6 +191,46 @@ class KeyManager @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "clear() failed", e)
         }
+    }
+
+    /** Check if "remember password" is enabled. */
+    fun isRememberPasswordEnabled(): Boolean {
+        return try {
+            prefs.getBoolean(KEY_REMEMBER_PASSWORD, false)
+        } catch (e: Exception) {
+            Log.e(TAG, "isRememberPasswordEnabled() failed", e)
+            false
+        }
+    }
+
+    /**
+     * Save password securely for auto-unlock.
+     * The password is stored in EncryptedSharedPreferences (Android Keystore backed).
+     */
+    fun savePassword(password: String) {
+        prefs.edit()
+            .putBoolean(KEY_REMEMBER_PASSWORD, true)
+            .putString(KEY_SAVED_PASSWORD, password)
+            .apply()
+    }
+
+    /** Retrieve the saved password, or null if not saved. */
+    fun getSavedPassword(): String? {
+        return try {
+            if (!prefs.getBoolean(KEY_REMEMBER_PASSWORD, false)) return null
+            prefs.getString(KEY_SAVED_PASSWORD, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "getSavedPassword() failed", e)
+            null
+        }
+    }
+
+    /** Clear the saved password (disable remember). */
+    fun clearSavedPassword() {
+        prefs.edit()
+            .putBoolean(KEY_REMEMBER_PASSWORD, false)
+            .remove(KEY_SAVED_PASSWORD)
+            .apply()
     }
 
     // --- Internal ---

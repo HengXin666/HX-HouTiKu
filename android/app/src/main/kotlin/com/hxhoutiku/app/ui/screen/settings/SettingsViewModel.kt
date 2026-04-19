@@ -30,7 +30,8 @@ data class SettingsUiState(
     val apiBase: String = "",
     val appVersion: String = "",
     val tokenSaved: Boolean = false,
-    val tokenError: String? = null
+    val tokenError: String? = null,
+    val rememberPassword: Boolean = false
 )
 
 /**
@@ -61,7 +62,8 @@ class SettingsViewModel @Inject constructor(
                 publicKey = keyManager.getPublicKey() ?: "",
                 recipientToken = keyManager.getRecipientToken() ?: "",
                 apiBase = apiBaseProvider.getBaseUrl(),
-                appVersion = com.hxhoutiku.app.BuildConfig.VERSION_NAME
+                appVersion = com.hxhoutiku.app.BuildConfig.VERSION_NAME,
+                rememberPassword = keyManager.isRememberPasswordEnabled()
             )
         } catch (e: Exception) {
             Log.e("SettingsVM", "init failed", e)
@@ -150,6 +152,22 @@ class SettingsViewModel @Inject constructor(
                 Log.e("SettingsVM", "clearMessages failed", e)
             }
         }
+    }
+
+    /**
+     * Toggle "remember password" setting.
+     * When disabled, clears the saved password immediately.
+     */
+    fun setRememberPassword(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (enabled) {
+                // Just update the UI state — password will be saved on next unlock
+                // (already handled in LockScreen)
+            } else {
+                keyManager.clearSavedPassword()
+            }
+        }
+        _uiState.update { it.copy(rememberPassword = enabled) }
     }
 
     fun checkForUpdate() {

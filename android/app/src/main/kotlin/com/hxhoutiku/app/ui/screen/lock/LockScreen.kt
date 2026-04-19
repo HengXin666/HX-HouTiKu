@@ -1,5 +1,6 @@
 package com.hxhoutiku.app.ui.screen.lock
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,6 +29,7 @@ fun LockScreen(
     var showPassword by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var rememberPassword by remember { mutableStateOf(authViewModel.isRememberPasswordEnabled()) }
     val scope = rememberCoroutineScope()
 
     fun doUnlock() {
@@ -37,7 +39,16 @@ fun LockScreen(
         scope.launch {
             val success = authViewModel.unlock(password)
             isLoading = false
-            if (success) onUnlocked() else error = true
+            if (success) {
+                if (rememberPassword) {
+                    authViewModel.saveRememberPassword(password)
+                } else {
+                    authViewModel.clearRememberPassword()
+                }
+                onUnlocked()
+            } else {
+                error = true
+            }
         }
     }
 
@@ -100,6 +111,25 @@ fun LockScreen(
                     { Text("密码错误") }
                 } else null
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = rememberPassword,
+                    onCheckedChange = { rememberPassword = it },
+                    enabled = !isLoading
+                )
+                Text(
+                    "记住密码",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.clickable(enabled = !isLoading) {
+                        rememberPassword = !rememberPassword
+                    }
+                )
+            }
 
             Button(
                 onClick = { doUnlock() },

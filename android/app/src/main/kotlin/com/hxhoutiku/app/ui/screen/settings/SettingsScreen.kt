@@ -169,6 +169,25 @@ fun SettingsScreen(
 
             // ── Actions ──
             ListItem(
+                headlineContent = { Text("记住密码") },
+                supportingContent = {
+                    Text(
+                        if (uiState.rememberPassword) "已开启 — 下次打开自动解锁"
+                        else "关闭 — 每次打开需要输入密码"
+                    )
+                },
+                leadingContent = { Icon(Icons.Default.Fingerprint, null) },
+                trailingContent = {
+                    Switch(
+                        checked = uiState.rememberPassword,
+                        onCheckedChange = { enabled ->
+                            viewModel.setRememberPassword(enabled)
+                        }
+                    )
+                }
+            )
+
+            ListItem(
                 headlineContent = { Text("锁定") },
                 supportingContent = { Text("锁定应用，需要重新输入密码") },
                 leadingContent = { Icon(Icons.Default.Lock, null) },

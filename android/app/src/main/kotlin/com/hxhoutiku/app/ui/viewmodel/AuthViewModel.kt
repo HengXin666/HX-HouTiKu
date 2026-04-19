@@ -54,7 +54,35 @@ class AuthViewModel @Inject constructor(
                 false
             }
         }
-        _state.value = if (hasKeys) AuthState.Locked else AuthState.NoKeys
+
+        if (!hasKeys) {
+            _state.value = AuthState.NoKeys
+            return
+        }
+
+        // Try auto-unlock if password is saved
+        val savedPassword = withContext(Dispatchers.IO) {
+            try {
+                keyManager.getSavedPassword()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        if (savedPassword != null) {
+            val privateKey = withContext(Dispatchers.Default) {
+                keyManager.unlock(savedPassword)
+            }
+            if (privateKey != null) {
+                SessionHolder.privateKeyHex = privateKey
+                _state.value = AuthState.Unlocked
+                return
+            }
+            // Saved password no longer valid — clear it
+            withContext(Dispatchers.IO) { keyManager.clearSavedPassword() }
+        }
+
+        _state.value = AuthState.Locked
     }
 
     /**
@@ -73,6 +101,23 @@ class AuthViewModel @Inject constructor(
             false
         }
     }
+
+    /** Save the password for auto-unlock on next launch. */
+    fun saveRememberPassword(password: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            keyManager.savePassword(password)
+        }
+    }
+
+    /** Clear the saved password. */
+    fun clearRememberPassword() {
+        viewModelScope.launch(Dispatchers.IO) {
+            keyManager.clearSavedPassword()
+        }
+    }
+
+    /** Check if remember password is currently enabled. */
+    fun isRememberPasswordEnabled(): Boolean = keyManager.isRememberPasswordEnabled()
 
     fun lock() {
         SessionHolder.privateKeyHex = null

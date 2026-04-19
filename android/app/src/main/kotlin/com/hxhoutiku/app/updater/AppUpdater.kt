@@ -16,14 +16,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.resume
 
 @JsonClass(generateAdapter = true)
 data class GitHubRelease(
@@ -74,32 +72,20 @@ class AppUpdater @Inject constructor(
     companion object {
         private const val GITHUB_OWNER = "Ayndpa"
         private const val GITHUB_REPO = "HX-HouTiKu"
-        private const val RELEASES_URL =
+        private const val RELEASES_LATEST_URL =
             "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+        private const val RELEASES_LIST_URL =
+            "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases?per_page=10"
     }
 
     suspend fun checkForUpdate(): UpdateInfo? = withContext(Dispatchers.IO) {
         _state.value = UpdateState.Checking
         try {
-            val request = Request.Builder()
-                .url(RELEASES_URL)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build()
+            // Try /releases/latest first; fall back to /releases list if 404
+            val release = fetchLatestRelease() ?: fetchFirstStableFromList()
 
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                _state.value = UpdateState.Error("检查更新失败: HTTP ${response.code}")
-                return@withContext null
-            }
-
-            val body = response.body?.string() ?: run {
-                _state.value = UpdateState.Error("空响应")
-                return@withContext null
-            }
-
-            val adapter = moshi.adapter(GitHubRelease::class.java)
-            val release = adapter.fromJson(body) ?: run {
-                _state.value = UpdateState.Error("解析失败")
+            if (release == null) {
+                _state.value = UpdateState.Error("未找到任何发布版本")
                 return@withContext null
             }
 
@@ -108,7 +94,9 @@ class AppUpdater @Inject constructor(
                 return@withContext null
             }
 
-            val remoteVersion = release.tagName.removePrefix("v")
+            val remoteVersion = release.tagName
+                .removePrefix("v")
+                .replace(Regex("-build\\.\\d+$"), "") // strip -build.N suffix
             val currentVersion = getCurrentVersion()
 
             if (!isNewerVersion(remoteVersion, currentVersion)) {
@@ -141,6 +129,48 @@ class AppUpdater @Inject constructor(
         } catch (e: Exception) {
             _state.value = UpdateState.Error("检查更新失败: ${e.localizedMessage}")
             null
+        }
+    }
+
+    /** Try the /releases/latest endpoint. Returns null on 404 or error. */
+    private fun fetchLatestRelease(): GitHubRelease? {
+        val request = Request.Builder()
+            .url(RELEASES_LATEST_URL)
+            .header("Accept", "application/vnd.github.v3+json")
+            .build()
+
+        val response = okHttpClient.newCall(request).execute()
+        if (!response.isSuccessful) return null
+
+        val body = response.body?.string() ?: return null
+        return moshi.adapter(GitHubRelease::class.java).fromJson(body)
+    }
+
+    /**
+     * Fallback: fetch the releases list and find the first non-prerelease
+     * release that contains an APK asset.
+     */
+    private fun fetchFirstStableFromList(): GitHubRelease? {
+        val request = Request.Builder()
+            .url(RELEASES_LIST_URL)
+            .header("Accept", "application/vnd.github.v3+json")
+            .build()
+
+        val response = okHttpClient.newCall(request).execute()
+        if (!response.isSuccessful) return null
+
+        val body = response.body?.string() ?: return null
+        val listType = com.squareup.moshi.Types.newParameterizedType(
+            List::class.java, GitHubRelease::class.java
+        )
+        val adapter = moshi.adapter<List<GitHubRelease>>(listType)
+        val releases = adapter.fromJson(body) ?: return null
+
+        // Prefer non-prerelease with APK; otherwise just return the first with APK
+        return releases.firstOrNull { release ->
+            !release.prerelease && release.assets.any { it.name.endsWith(".apk") }
+        } ?: releases.firstOrNull { release ->
+            release.assets.any { it.name.endsWith(".apk") }
         }
     }
 

@@ -88,7 +88,8 @@ jobs:
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' android/app/build.gradle.kts || echo "1.0.0")
           VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K\d+' android/app/build.gradle.kts || echo "1")
           SHORT_SHA=${GITHUB_SHA::7}
-          TAG="v${VERSION_NAME}-build.${GITHUB_RUN_NUMBER}"
+          # Use clean semver tag (no -build suffix to avoid GitHub prerelease detection)
+          TAG="v${VERSION_NAME}"
           echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
           echo "version_code=${VERSION_CODE}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
@@ -98,14 +99,15 @@ jobs:
       - name: Rename APK
         run: |
           APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
-          mv "$APK" "android/app/build/outputs/apk/release/HX-HouTiKu-${{ steps.version.outputs.tag }}.apk"
-          echo "📦 APK: HX-HouTiKu-${{ steps.version.outputs.tag }}.apk"
+          mv "$APK" "android/app/build/outputs/apk/release/HX-HouTiKu-${{ steps.version.outputs.tag }}-release.apk"
+          echo "📦 APK: HX-HouTiKu-${{ steps.version.outputs.tag }}-release.apk"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "🚀 HX-HouTiKu ${{ steps.version.outputs.tag }}"
+          prerelease: false
           body: |
             ## 📱 Android Release
 
