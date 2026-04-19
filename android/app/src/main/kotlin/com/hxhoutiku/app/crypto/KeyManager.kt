@@ -108,7 +108,21 @@ class KeyManager @Inject constructor(
         }
     }
 
-    /** Store recipient info after registration. */
+    /** Store recipient token (user pastes this from admin API response). */
+    fun saveRecipientToken(token: String) {
+        prefs.edit()
+            .putString(KEY_RECIPIENT_TOKEN, token)
+            .apply()
+    }
+
+    /** Store device name. */
+    fun saveDeviceName(name: String) {
+        prefs.edit()
+            .putString(KEY_RECIPIENT_NAME, name)
+            .apply()
+    }
+
+    /** Store recipient info (token + name). */
     fun saveRecipientInfo(token: String, name: String) {
         prefs.edit()
             .putString(KEY_RECIPIENT_TOKEN, token)
