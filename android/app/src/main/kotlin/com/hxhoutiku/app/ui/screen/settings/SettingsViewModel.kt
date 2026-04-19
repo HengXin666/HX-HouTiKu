@@ -1,5 +1,6 @@
 package com.hxhoutiku.app.ui.screen.settings
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hxhoutiku.app.crypto.KeyManager
@@ -35,17 +36,31 @@ class SettingsViewModel @Inject constructor(
     val updateState: StateFlow<UpdateState> = appUpdater.state
 
     init {
-        _uiState.value = SettingsUiState(
-            recipientName = keyManager.getRecipientName() ?: "未注册",
-            publicKey = keyManager.getPublicKey() ?: "",
-            apiBase = apiBaseProvider.getBaseUrl(),
-            appVersion = com.hxhoutiku.app.BuildConfig.VERSION_NAME
-        )
+        try {
+            _uiState.value = SettingsUiState(
+                recipientName = keyManager.getRecipientName() ?: "未注册",
+                publicKey = keyManager.getPublicKey() ?: "",
+                apiBase = apiBaseProvider.getBaseUrl(),
+                appVersion = com.hxhoutiku.app.BuildConfig.VERSION_NAME
+            )
+        } catch (e: Exception) {
+            Log.e("SettingsVM", "init failed", e)
+            _uiState.value = SettingsUiState(
+                recipientName = "加载失败",
+                publicKey = "",
+                apiBase = "未知",
+                appVersion = "未知"
+            )
+        }
     }
 
     fun clearMessages() {
         viewModelScope.launch {
-            repository.clearAll()
+            try {
+                repository.clearAll()
+            } catch (e: Exception) {
+                Log.e("SettingsVM", "clearMessages failed", e)
+            }
         }
     }
 

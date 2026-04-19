@@ -1,11 +1,11 @@
 package com.hxhoutiku.app.ui.screen.feed
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hxhoutiku.app.crypto.KeyManager
 import com.hxhoutiku.app.data.local.entity.MessageEntity
 import com.hxhoutiku.app.data.repository.MessageRepository
-import com.hxhoutiku.app.ui.viewmodel.AuthViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -36,19 +36,14 @@ class FeedViewModel @Inject constructor(
 
     fun refresh() {
         val token = keyManager.getRecipientToken() ?: return
-        // We need the private key from somewhere — in a real app this would
-        // come from the auth state. For now we'll attempt to use a cached key
-        // via a shared mechanism.
+        val privateKey = SessionHolder.privateKeyHex ?: return
+
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                // Get private key from session holder
-                val privateKey = SessionHolder.privateKeyHex
-                if (privateKey != null) {
-                    repository.fetchAndDecrypt(token, privateKey)
-                }
+                repository.fetchAndDecrypt(token, privateKey)
             } catch (e: Exception) {
-                // TODO: expose error to UI
+                Log.w("FeedViewModel", "refresh failed", e)
             } finally {
                 _isRefreshing.value = false
             }
@@ -58,8 +53,10 @@ class FeedViewModel @Inject constructor(
 
 /**
  * Simple in-memory session holder for the unlocked private key.
- * In production, consider a more robust approach.
+ * Lives as a global singleton — the private key is available as long as
+ * the app process is alive and the user hasn't locked.
  */
 object SessionHolder {
+    @Volatile
     var privateKeyHex: String? = null
 }

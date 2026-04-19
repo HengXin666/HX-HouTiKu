@@ -17,9 +17,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hxhoutiku.app.ui.viewmodel.AuthViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun LockScreen(
@@ -37,9 +35,7 @@ fun LockScreen(
         isLoading = true
         error = false
         scope.launch {
-            val success = withContext(Dispatchers.Default) {
-                authViewModel.unlock(password)
-            }
+            val success = authViewModel.unlock(password)
             isLoading = false
             if (success) onUnlocked() else error = true
         }
@@ -84,6 +80,7 @@ fun LockScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 isError = error,
+                enabled = !isLoading,
                 visualTransformation = if (showPassword) VisualTransformation.None
                     else PasswordVisualTransformation(),
                 trailingIcon = {
@@ -115,8 +112,10 @@ fun LockScreen(
                         strokeWidth = 2.dp
                     )
                     Spacer(Modifier.width(8.dp))
+                    Text("解锁中...")
+                } else {
+                    Text("解锁")
                 }
-                Text("解锁")
             }
         }
     }

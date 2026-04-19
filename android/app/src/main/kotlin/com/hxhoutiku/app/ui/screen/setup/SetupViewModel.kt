@@ -10,11 +10,13 @@ import com.hxhoutiku.app.data.remote.dto.SubscribeRequest
 import com.hxhoutiku.app.ui.screen.feed.SessionHolder
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class SetupUiState(
@@ -40,15 +42,34 @@ class SetupViewModel @Inject constructor(
     fun setPasswordConfirm(value: String) = _uiState.update { it.copy(passwordConfirm = value) }
     fun setRecipientName(value: String) = _uiState.update { it.copy(recipientName = value) }
 
+    /**
+     * Generate keys asynchronously. PBKDF2 (600k iterations) runs on Dispatchers.Default.
+     */
     fun generateKeys() {
         val state = _uiState.value
-        val publicKey = keyManager.generateAndStore(state.password)
-        // Immediately unlock to cache private key for the session
-        val privateKey = keyManager.unlock(state.password)
-        if (privateKey != null) {
-            SessionHolder.privateKeyHex = privateKey
+        _uiState.update { it.copy(isLoading = true, error = null) }
+
+        viewModelScope.launch {
+            try {
+                val (publicKey, privateKey) = withContext(Dispatchers.Default) {
+                    val pubKey = keyManager.generateAndStore(state.password)
+                    val privKey = keyManager.unlock(state.password)
+                    Pair(pubKey, privKey)
+                }
+
+                if (privateKey != null) {
+                    SessionHolder.privateKeyHex = privateKey
+                }
+
+                _uiState.update {
+                    it.copy(step = 2, publicKey = publicKey, isLoading = false)
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(isLoading = false, error = "密钥生成失败: ${e.message}")
+                }
+            }
         }
-        _uiState.update { it.copy(step = 2, publicKey = publicKey) }
     }
 
     fun register(onComplete: () -> Unit) {
@@ -57,7 +78,6 @@ class SetupViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Register recipient (no admin token needed)
                 val response = api.registerRecipient(
                     body = RegisterRecipientRequest(
                         name = state.recipientName,
@@ -66,9 +86,11 @@ class SetupViewModel @Inject constructor(
                     )
                 )
 
-                keyManager.saveRecipientInfo(response.recipientToken, response.name)
+                withContext(Dispatchers.IO) {
+                    keyManager.saveRecipientInfo(response.recipientToken, response.name)
+                }
 
-                // Register FCM token for push notifications
+                // Register FCM token for push notifications (non-fatal)
                 try {
                     val fcmToken = FirebaseMessaging.getInstance().token.await()
                     api.subscribe(

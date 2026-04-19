@@ -1,6 +1,7 @@
 package com.hxhoutiku.app
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,9 +31,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 启动时静默检查更新（不阻塞 UI）
+        // 启动时静默检查更新（不阻塞 UI，失败不影响）
         lifecycleScope.launch {
-            appUpdater.checkForUpdate()
+            try {
+                appUpdater.checkForUpdate()
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Update check failed silently", e)
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 package com.hxhoutiku.app.crypto
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,19 +28,8 @@ import javax.inject.Singleton
 class KeyManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val prefs = EncryptedSharedPreferences.create(
-        context,
-        "hx_keystore",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
-
     companion object {
+        private const val TAG = "KeyManager"
         private const val PBKDF2_ITERATIONS = 600_000
         private const val SALT_LENGTH = 16
         private const val IV_LENGTH = 12
@@ -52,17 +43,70 @@ class KeyManager @Inject constructor(
         private const val KEY_RECIPIENT_NAME = "recipient_name"
     }
 
+    /**
+     * Lazy initialization of EncryptedSharedPreferences.
+     * This avoids crashing in the constructor if Android Keystore has issues.
+     */
+    private val prefs: SharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+
+            EncryptedSharedPreferences.create(
+                context,
+                "hx_keystore",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "EncryptedSharedPreferences failed, falling back to plain prefs", e)
+            // Fallback: if Keystore is corrupted, use plain SharedPreferences
+            // This is a last resort to prevent crash — data won't be Keystore-encrypted
+            context.getSharedPreferences("hx_keystore_fallback", Context.MODE_PRIVATE)
+        }
+    }
+
     /** Check if keys have been set up. */
-    fun hasKeys(): Boolean = prefs.contains(KEY_ENCRYPTED_PRIVATE)
+    fun hasKeys(): Boolean {
+        return try {
+            prefs.contains(KEY_ENCRYPTED_PRIVATE)
+        } catch (e: Exception) {
+            Log.e(TAG, "hasKeys() failed", e)
+            false
+        }
+    }
 
     /** Get stored public key (hex), or null if not set up. */
-    fun getPublicKey(): String? = prefs.getString(KEY_PUBLIC, null)
+    fun getPublicKey(): String? {
+        return try {
+            prefs.getString(KEY_PUBLIC, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "getPublicKey() failed", e)
+            null
+        }
+    }
 
     /** Get stored recipient token. */
-    fun getRecipientToken(): String? = prefs.getString(KEY_RECIPIENT_TOKEN, null)
+    fun getRecipientToken(): String? {
+        return try {
+            prefs.getString(KEY_RECIPIENT_TOKEN, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "getRecipientToken() failed", e)
+            null
+        }
+    }
 
     /** Get stored recipient name. */
-    fun getRecipientName(): String? = prefs.getString(KEY_RECIPIENT_NAME, null)
+    fun getRecipientName(): String? {
+        return try {
+            prefs.getString(KEY_RECIPIENT_NAME, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "getRecipientName() failed", e)
+            null
+        }
+    }
 
     /** Store recipient info after registration. */
     fun saveRecipientInfo(token: String, name: String) {
@@ -74,6 +118,9 @@ class KeyManager @Inject constructor(
 
     /**
      * Generate a new key pair and wrap the private key with the master password.
+     *
+     * WARNING: This method involves PBKDF2 (600k iterations) and must NOT be called
+     * on the main thread.
      *
      * @return The public key hex string
      */
@@ -95,6 +142,9 @@ class KeyManager @Inject constructor(
     /**
      * Unlock the private key using the master password.
      *
+     * WARNING: This method involves PBKDF2 (600k iterations) and must NOT be called
+     * on the main thread.
+     *
      * @return The decrypted private key hex, or null if password is wrong.
      */
     fun unlock(password: String): String? {
@@ -112,14 +162,19 @@ class KeyManager @Inject constructor(
             cipher.init(Cipher.DECRYPT_MODE, wrappingKey, GCMParameterSpec(GCM_TAG_BITS, iv))
             val plaintext = cipher.doFinal(ciphertext)
             String(plaintext, Charsets.UTF_8)
-        } catch (_: Exception) {
-            null // Wrong password or corrupted data
+        } catch (e: Exception) {
+            Log.w(TAG, "unlock() failed — wrong password or corrupted data", e)
+            null
         }
     }
 
     /** Wipe all stored keys (factory reset). */
     fun clear() {
-        prefs.edit().clear().apply()
+        try {
+            prefs.edit().clear().apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "clear() failed", e)
+        }
     }
 
     // --- Internal ---

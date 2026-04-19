@@ -72,6 +72,7 @@ private fun StepPassword(viewModel: SetupViewModel, state: SetupUiState) {
         label = { Text("主密码") },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        enabled = !state.isLoading,
         visualTransformation = if (showPassword) VisualTransformation.None
             else PasswordVisualTransformation(),
         trailingIcon = {
@@ -90,6 +91,7 @@ private fun StepPassword(viewModel: SetupViewModel, state: SetupUiState) {
         label = { Text("确认密码") },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+        enabled = !state.isLoading,
         visualTransformation = PasswordVisualTransformation(),
         isError = state.passwordConfirm.isNotEmpty() && state.password != state.passwordConfirm
     )
@@ -102,14 +104,33 @@ private fun StepPassword(viewModel: SetupViewModel, state: SetupUiState) {
         )
     }
 
+    if (state.error != null) {
+        Text(
+            state.error,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+
     Button(
         onClick = viewModel::generateKeys,
         modifier = Modifier.fillMaxWidth(),
-        enabled = state.password.length >= 8 && state.password == state.passwordConfirm
+        enabled = state.password.length >= 8
+                && state.password == state.passwordConfirm
+                && !state.isLoading
     ) {
-        Icon(Icons.Default.Key, contentDescription = null)
-        Spacer(Modifier.width(8.dp))
-        Text("生成密钥对")
+        if (state.isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp
+            )
+            Spacer(Modifier.width(8.dp))
+            Text("正在生成密钥...")
+        } else {
+            Icon(Icons.Default.Key, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("生成密钥对")
+        }
     }
 }
 
@@ -150,7 +171,8 @@ private fun StepRegister(
         label = { Text("设备名称") },
         placeholder = { Text("my-android") },
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true
+        singleLine = true,
+        enabled = !state.isLoading
     )
 
     if (state.error != null) {

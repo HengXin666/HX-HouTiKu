@@ -1,8 +1,14 @@
 package com.hxhoutiku.app.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -18,6 +24,7 @@ import com.hxhoutiku.app.ui.screen.setup.SetupScreen
 import com.hxhoutiku.app.ui.viewmodel.AuthViewModel
 
 sealed class Screen(val route: String) {
+    data object Loading : Screen("loading")
     data object Setup : Screen("setup")
     data object Lock : Screen("lock")
     data object Feed : Screen("feed")
@@ -37,22 +44,68 @@ fun HxNavHost() {
     val authVm: AuthViewModel = hiltViewModel()
     val authState by authVm.state.collectAsState()
 
-    val startDestination = when (authState) {
-        AuthViewModel.AuthState.NoKeys -> Screen.Setup.route
-        AuthViewModel.AuthState.Locked -> Screen.Lock.route
-        is AuthViewModel.AuthState.Unlocked -> Screen.Feed.route
-        AuthViewModel.AuthState.Loading -> Screen.Lock.route
+    // React to auth state changes — navigate imperatively
+    LaunchedEffect(authState) {
+        when (authState) {
+            AuthViewModel.AuthState.Loading -> { /* stay on loading screen */ }
+            AuthViewModel.AuthState.NoKeys -> {
+                navController.navigate(Screen.Setup.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+            AuthViewModel.AuthState.Locked -> {
+                navController.navigate(Screen.Lock.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+            AuthViewModel.AuthState.Unlocked -> {
+                navController.navigate(Screen.Feed.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
     }
 
-    NavHost(navController = navController, startDestination = startDestination) {
+    // Also listen to explicit nav events (lock/reset/setup-complete)
+    LaunchedEffect(Unit) {
+        authVm.navEvent.collect { event ->
+            when (event) {
+                AuthViewModel.NavEvent.GoToFeed -> {
+                    navController.navigate(Screen.Feed.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+                AuthViewModel.NavEvent.GoToSetup -> {
+                    navController.navigate(Screen.Setup.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+                AuthViewModel.NavEvent.GoToLock -> {
+                    navController.navigate(Screen.Lock.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fixed startDestination — always "loading"
+    NavHost(navController = navController, startDestination = Screen.Loading.route) {
+
+        composable(Screen.Loading.route) {
+            // Simple loading indicator while AuthViewModel determines state
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
         composable(Screen.Setup.route) {
             SetupScreen(
                 onSetupComplete = {
-                    // Notify auth state that we now have keys and are unlocked
                     authVm.notifySetupComplete()
-                    navController.navigate(Screen.Feed.route) {
-                        popUpTo(Screen.Setup.route) { inclusive = true }
-                    }
                 }
             )
         }
@@ -61,7 +114,7 @@ fun HxNavHost() {
             LockScreen(
                 onUnlocked = {
                     navController.navigate(Screen.Feed.route) {
-                        popUpTo(Screen.Lock.route) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )
@@ -123,15 +176,9 @@ fun HxNavHost() {
                 onBack = { navController.popBackStack() },
                 onLock = {
                     authVm.lock()
-                    navController.navigate(Screen.Lock.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
                 },
                 onReset = {
                     authVm.reset()
-                    navController.navigate(Screen.Setup.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
                 }
             )
         }

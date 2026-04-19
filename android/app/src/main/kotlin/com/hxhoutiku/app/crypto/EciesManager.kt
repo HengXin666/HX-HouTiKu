@@ -45,8 +45,9 @@ object EciesManager {
     )
 
     init {
+        // BouncyCastle is installed in HxApp.onCreate(), but double-check
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
-            Security.addProvider(BouncyCastleProvider())
+            Security.insertProviderAt(BouncyCastleProvider(), 1)
         }
     }
 

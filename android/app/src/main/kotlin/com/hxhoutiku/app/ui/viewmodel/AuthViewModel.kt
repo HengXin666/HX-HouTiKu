@@ -1,11 +1,17 @@
 package com.hxhoutiku.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.hxhoutiku.app.crypto.KeyManager
 import com.hxhoutiku.app.ui.screen.feed.SessionHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -17,28 +23,51 @@ class AuthViewModel @Inject constructor(
         data object Loading : AuthState()
         data object NoKeys : AuthState()
         data object Locked : AuthState()
-        data class Unlocked(val privateKeyHex: String) : AuthState()
+        data object Unlocked : AuthState()
+    }
+
+    /** One-shot navigation events to avoid startDestination races. */
+    sealed class NavEvent {
+        data object GoToFeed : NavEvent()
+        data object GoToSetup : NavEvent()
+        data object GoToLock : NavEvent()
     }
 
     private val _state = MutableStateFlow<AuthState>(AuthState.Loading)
     val state: StateFlow<AuthState> = _state
 
-    init {
-        checkState()
-    }
+    private val _navEvent = MutableSharedFlow<NavEvent>(extraBufferCapacity = 1)
+    val navEvent: SharedFlow<NavEvent> = _navEvent
 
-    private fun checkState() {
-        _state.value = when {
-            !keyManager.hasKeys() -> AuthState.NoKeys
-            else -> AuthState.Locked
+    init {
+        viewModelScope.launch {
+            checkState()
         }
     }
 
-    fun unlock(password: String): Boolean {
-        val privateKey = keyManager.unlock(password)
+    private suspend fun checkState() {
+        // hasKeys() reads EncryptedSharedPreferences — do off main thread
+        val hasKeys = withContext(Dispatchers.IO) {
+            try {
+                keyManager.hasKeys()
+            } catch (_: Exception) {
+                false
+            }
+        }
+        _state.value = if (hasKeys) AuthState.Locked else AuthState.NoKeys
+    }
+
+    /**
+     * Attempt to unlock with password. Runs PBKDF2 off the main thread.
+     * Returns true on success.
+     */
+    suspend fun unlock(password: String): Boolean {
+        val privateKey = withContext(Dispatchers.Default) {
+            keyManager.unlock(password)
+        }
         return if (privateKey != null) {
             SessionHolder.privateKeyHex = privateKey
-            _state.value = AuthState.Unlocked(privateKey)
+            _state.value = AuthState.Unlocked
             true
         } else {
             false
@@ -48,32 +77,25 @@ class AuthViewModel @Inject constructor(
     fun lock() {
         SessionHolder.privateKeyHex = null
         _state.value = AuthState.Locked
+        _navEvent.tryEmit(NavEvent.GoToLock)
     }
 
     fun reset() {
         SessionHolder.privateKeyHex = null
-        keyManager.clear()
+        viewModelScope.launch(Dispatchers.IO) {
+            keyManager.clear()
+        }
         _state.value = AuthState.NoKeys
+        _navEvent.tryEmit(NavEvent.GoToSetup)
     }
 
-    fun getPrivateKeyHex(): String? {
-        val s = _state.value
-        return if (s is AuthState.Unlocked) s.privateKeyHex else null
+    /**
+     * Called after setup completes. SessionHolder.privateKeyHex is already set.
+     */
+    fun notifySetupComplete() {
+        _state.value = AuthState.Unlocked
+        _navEvent.tryEmit(NavEvent.GoToFeed)
     }
 
     fun getRecipientToken(): String? = keyManager.getRecipientToken()
-
-    /**
-     * Called after setup completes to update auth state to Unlocked.
-     * At this point SessionHolder.privateKeyHex is already set by SetupViewModel.
-     */
-    fun notifySetupComplete() {
-        val privateKey = SessionHolder.privateKeyHex
-        if (privateKey != null) {
-            _state.value = AuthState.Unlocked(privateKey)
-        } else {
-            // Fallback: at least mark as Locked so we don't loop back to Setup
-            _state.value = AuthState.Locked
-        }
-    }
 }
