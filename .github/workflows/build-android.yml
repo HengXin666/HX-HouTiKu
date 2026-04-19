@@ -75,7 +75,7 @@ jobs:
       - name: Build Release APK
         working-directory: android
         env:
-          KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 && 'app/release.keystore' || '' }}
+          KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 && 'release.keystore' || '' }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
