@@ -28,14 +28,20 @@ Thumbs.db
 .wrangler/
 .mf/
 
-# Capacitor native projects (CI 中动态生成)
-frontend/android/
-frontend/ios/
+# Android native build outputs
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
 
 # Android signing keys
 *.keystore
 *.jks
 keystore-base64.txt
+
+# Legacy Capacitor (已废弃)
+frontend/android/
+frontend/ios/
 
 # Firebase / FCM (敏感凭证，绝对不能提交!)
 google-services.json

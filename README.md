@@ -34,7 +34,7 @@ AI 定时任务、CI/CD、监控告警、工作流通知……消息来源越来
 - 🔀 **统一聚合** — 一次 SDK 调用，所有来源汇聚到同一个入口
 - 🏷️ **优先级 + 分组** — urgent / high / default / low / debug 五级 + 自定义分组
 - 🔐 **端到端加密** — ECIES 混合加密，服务端只存密文，私钥永远不离开你的设备
-- 📱 **多端接收** — PWA (iOS/Android/桌面浏览器) + Android 原生 App
+- 📱 **多端接收** — PWA (iOS/桌面浏览器) + Android 原生 App (Kotlin/Compose)
 - 🆓 **零成本** — 运行在 Cloudflare 免费套餐上，完全自托管
 
 ## 架构
@@ -61,10 +61,11 @@ AI 定时任务、CI/CD、监控告警、工作流通知……消息来源越来
 |----|------|
 | 后端 | Cloudflare Workers + Hono |
 | 数据库 | Cloudflare D1 (SQLite) |
-| 前端 | React 19 + Vite + Tailwind v4 |
+| Web 前端 | React 19 + Vite + Tailwind v4 (PWA) |
+| Android 原生 | Kotlin + Jetpack Compose + Material 3 |
 | 加密 | ECIES (secp256k1 + AES-256-GCM) |
 | 推送 SDK | Python (eciespy + httpx) |
-| Android 原生推送 | Firebase Cloud Messaging (FCM) |
+| Android 推送 | Firebase Cloud Messaging (FCM) 系统级 |
 
 ---
 
@@ -131,7 +132,8 @@ export HX_HOUTIKU_TOKEN="你的ADMIN_TOKEN"
 ```
 HX-HouTiKu/
 ├── worker/           # Cloudflare Worker (API 后端)
-├── frontend/         # React PWA + Capacitor (前端客户端)
+├── frontend/         # React PWA (Web 前端)
+├── android/          # Android 原生客户端 (Kotlin + Compose)
 ├── sdk/              # Python 推送 SDK
 ├── scripts/          # Shell 工具脚本
 ├── docs/             # 文档
@@ -144,8 +146,12 @@ HX-HouTiKu/
 # 后端
 cd worker && pnpm install && pnpm dev
 
-# 前端
+# Web 前端
 cd frontend && pnpm install && pnpm dev
+
+# Android 原生客户端
+cd android && ./gradlew assembleDebug
+# 或用 Android Studio 打开 android/ 目录
 
 # Python SDK
 cd sdk && uv sync && uv run pytest
