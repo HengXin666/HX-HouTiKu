@@ -156,11 +156,13 @@ async function importClientPublicKey(b64url: string): Promise<CryptoKey> {
  * Generate an ephemeral P-256 key pair for ECDH.
  */
 async function generateEphemeralKeyPair(): Promise<CryptoKeyPair> {
+  // Cloudflare Workers types return CryptoKey | CryptoKeyPair for generateKey;
+  // ECDH always produces a key pair, so the assertion is safe.
   return crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
     true,  // extractable — we need to export the public key
     ["deriveBits"],
-  );
+  ) as Promise<CryptoKeyPair>;
 }
 
 /**
@@ -240,13 +242,15 @@ async function encryptPayload(
   const ephemeralKeyPair = await generateEphemeralKeyPair();
 
   // Export the ephemeral public key (65 bytes, uncompressed point)
+  // Cloudflare Workers types: exportKey returns ArrayBuffer | JsonWebKey; "raw" always gives ArrayBuffer
   const serverPublicKeyRaw = new Uint8Array(
-    await crypto.subtle.exportKey("raw", ephemeralKeyPair.publicKey),
+    await crypto.subtle.exportKey("raw", ephemeralKeyPair.publicKey) as ArrayBuffer,
   );
 
   // ECDH shared secret
+  // Note: Cloudflare Workers types use "$public" instead of "public" in SubtleCryptoDeriveKeyAlgorithm
   const sharedSecretBits = await crypto.subtle.deriveBits(
-    { name: "ECDH", public: clientPublicKey },
+    { name: "ECDH", $public: clientPublicKey },
     ephemeralKeyPair.privateKey,
     256, // 32 bytes
   );
