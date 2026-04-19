@@ -64,7 +64,8 @@ export function MessageDetail() {
   const { label: formatLabel, Icon: FormatIcon } = getFormatInfo(detectedFormat);
 
   const handleCopy = async () => {
-    const ok = await copyToClipboard(`${message.title}\n\n${message.body}`);
+    const ok = await copyToClipboard(`${message.title}\n\n${message.body ?? ""}`);
+
     if (ok) {
       Toast.show({ content: "已复制", position: "bottom" });
     }
@@ -123,9 +124,9 @@ export function MessageDetail() {
       )}
 
       {/* Tags */}
-      {message.tags.length > 0 && (
+      {(message.tags ?? []).length > 0 && (
         <div className="msg-detail-tags">
-          {message.tags.map((tag) => (
+          {(message.tags ?? []).map((tag) => (
             <span key={tag} className="msg-detail-tag">{tag}</span>
           ))}
         </div>

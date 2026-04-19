@@ -91,11 +91,17 @@ app.post("/", authPushToken(), async (c) => {
             // Standard Web Push (VAPID)
             await sendWebPush(c.env, sub, pushPayload);
           }
-        } catch {
-          // Subscription expired — clean it up
-          await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
-            .bind(sub.id)
-            .run();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`Push failed for sub ${sub.id} (${sub.endpoint.slice(0, 60)}...): ${msg}`);
+
+          // Only clean up subscriptions that are definitively gone (410 Gone)
+          if (msg.includes("410") || msg.includes("expired")) {
+            await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
+              .bind(sub.id)
+              .run();
+            console.log(`Cleaned up expired subscription ${sub.id}`);
+          }
         }
       }
     }
@@ -156,8 +162,17 @@ async function sendWebPush(
   });
 
   const resp = await fetch(endpoint, { method: "POST", headers, body });
-  if (!resp.ok && resp.status === 410) {
-    throw new Error("Subscription expired");
+
+  if (!resp.ok) {
+    const respBody = await resp.text().catch(() => "");
+    const errMsg = `Web Push failed: ${resp.status} ${resp.statusText} — ${respBody}`;
+    console.error(errMsg);
+
+    if (resp.status === 410 || resp.status === 404) {
+      throw new Error(`410 Subscription expired`);
+    }
+
+    throw new Error(errMsg);
   }
 }
 
