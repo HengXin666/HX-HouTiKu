@@ -48,6 +48,8 @@ fun HxNavHost() {
         composable(Screen.Setup.route) {
             SetupScreen(
                 onSetupComplete = {
+                    // Notify auth state that we now have keys and are unlocked
+                    authVm.notifySetupComplete()
                     navController.navigate(Screen.Feed.route) {
                         popUpTo(Screen.Setup.route) { inclusive = true }
                     }

@@ -17,6 +17,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.hxhoutiku.app.ui.viewmodel.AuthViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LockScreen(
@@ -27,6 +30,20 @@ fun LockScreen(
     var showPassword by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    fun doUnlock() {
+        if (password.isEmpty() || isLoading) return
+        isLoading = true
+        error = false
+        scope.launch {
+            val success = withContext(Dispatchers.Default) {
+                authViewModel.unlock(password)
+            }
+            isLoading = false
+            if (success) onUnlocked() else error = true
+        }
+    }
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -80,14 +97,7 @@ fun LockScreen(
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (password.isNotEmpty()) {
-                            isLoading = true
-                            val success = authViewModel.unlock(password)
-                            isLoading = false
-                            if (success) onUnlocked() else error = true
-                        }
-                    }
+                    onDone = { doUnlock() }
                 ),
                 supportingText = if (error) {
                     { Text("密码错误") }
@@ -95,12 +105,7 @@ fun LockScreen(
             )
 
             Button(
-                onClick = {
-                    isLoading = true
-                    val success = authViewModel.unlock(password)
-                    isLoading = false
-                    if (success) onUnlocked() else error = true
-                },
+                onClick = { doUnlock() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = password.isNotEmpty() && !isLoading
             ) {

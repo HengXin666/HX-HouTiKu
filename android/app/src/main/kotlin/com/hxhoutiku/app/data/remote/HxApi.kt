@@ -31,7 +31,6 @@ interface HxApi {
 
     @POST("/api/recipients")
     suspend fun registerRecipient(
-        @Header("Authorization") auth: String,
         @Body body: RegisterRecipientRequest
     ): RegisterRecipientResponse
 
