@@ -116,3 +116,7 @@ dependencies {
     implementation(libs.markwon.html)
     implementation(libs.markwon.syntax.highlight)
 }
+
+configurations.all {
+    exclude(group = "org.jetbrains", module = "annotations-java5")
+}
