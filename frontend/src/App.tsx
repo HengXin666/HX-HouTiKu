@@ -24,14 +24,20 @@ export function App() {
     return <SplashScreen />;
   }
 
+  return (
+    <BrowserRouter>
+      <AppContent status={status} />
+    </BrowserRouter>
+  );
+}
+
+function AppContent({ status }: { status: string }) {
   if (status === "no-keys") {
     return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/setup" element={<SetupWizard />} />
-          <Route path="*" element={<Navigate to="/setup" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <Routes>
+        <Route path="/setup" element={<SetupWizard />} />
+        <Route path="*" element={<Navigate to="/setup" replace />} />
+      </Routes>
     );
   }
 
@@ -41,18 +47,16 @@ export function App() {
 
   // Unlocked — full app
   return (
-    <BrowserRouter>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<Feed />} />
-          <Route path="/groups" element={<GroupView />} />
-          <Route path="/groups/:groupName" element={<Feed />} />
-          <Route path="/message/:id" element={<MessageDetail />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AppShell>
-    </BrowserRouter>
+    <AppShell>
+      <Routes>
+        <Route path="/" element={<Feed />} />
+        <Route path="/groups" element={<GroupView />} />
+        <Route path="/groups/:groupName" element={<Feed />} />
+        <Route path="/message/:id" element={<MessageDetail />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AppShell>
   );
 }
 

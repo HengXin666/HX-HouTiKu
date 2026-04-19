@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { MessageCard } from "./MessageCard";
 import { EmptyState } from "./EmptyState";
 import { groupByDate } from "@/lib/utils";
@@ -16,13 +17,14 @@ export function MessageList({ messages, loading }: MessageListProps) {
   const groups = groupByDate(messages);
 
   return (
-    <div className="space-y-6">
+    <div className="msg-list">
       {[...groups.entries()].map(([date, msgs]) => (
-        <section key={date}>
-          <h2 className="sticky top-0 z-10 mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            {date}
-          </h2>
-          <div className="space-y-2">
+        <section key={date} className="msg-list-group">
+          <div className="msg-list-date">
+            <span className="msg-list-date-text">{date}</span>
+            <span className="msg-list-date-count">{msgs.length} 条</span>
+          </div>
+          <div className="msg-list-items">
             {msgs.map((msg) => (
               <MessageCard key={msg.id} message={msg} />
             ))}
@@ -31,8 +33,9 @@ export function MessageList({ messages, loading }: MessageListProps) {
       ))}
 
       {loading && (
-        <div className="flex justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-primary" />
+        <div className="msg-list-loading">
+          <Loader2 className="msg-list-loading-icon animate-spin" />
+          <span>加载中…</span>
         </div>
       )}
     </div>

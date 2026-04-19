@@ -11,28 +11,30 @@ interface MessageCardProps {
 export function MessageCard({ message }: MessageCardProps) {
   const navigate = useNavigate();
 
+  const priorityBorderClass = !message.is_read
+    ? ({
+        urgent: "msg-card--urgent",
+        high: "msg-card--high",
+        default: "msg-card--default",
+        low: "msg-card--low",
+        debug: "msg-card--debug",
+      }[message.priority] ?? "")
+    : "";
+
   return (
     <button
       onClick={() => navigate(`/message/${message.id}`)}
       className={cn(
-        "w-full text-left rounded-xl border border-border bg-card p-4 transition-all",
-        "hover:border-border hover:bg-card/80 hover:shadow-lg hover:shadow-black/5",
-        "active:scale-[0.99]",
-        "animate-[fade-in_0.2s_ease-out]",
-        !message.is_read && "border-l-2",
-        !message.is_read && message.priority === "urgent" && "border-l-priority-urgent",
-        !message.is_read && message.priority === "high" && "border-l-priority-high",
-        !message.is_read && message.priority === "default" && "border-l-primary",
-        !message.is_read && message.priority === "low" && "border-l-priority-low",
-        !message.is_read && message.priority === "debug" && "border-l-priority-debug",
-        message.is_read && "opacity-60"
+        "msg-card",
+        priorityBorderClass,
+        message.is_read && "msg-card--read"
       )}
     >
-      {/* Top row: badge + group + time */}
-      <div className="flex items-center gap-2 mb-2">
+      {/* Top row: meta */}
+      <div className="msg-card-meta">
         <PriorityBadge priority={message.priority} />
         <GroupChip group={message.group} />
-        <span className="ml-auto text-[11px] text-muted-foreground whitespace-nowrap">
+        <span className="msg-card-time">
           {formatTime(message.timestamp)}
         </span>
       </div>
@@ -40,31 +42,35 @@ export function MessageCard({ message }: MessageCardProps) {
       {/* Title */}
       <h3
         className={cn(
-          "text-sm leading-snug mb-1 line-clamp-1",
-          !message.is_read ? "font-semibold text-foreground" : "font-medium text-muted-foreground"
+          "msg-card-title",
+          !message.is_read && "msg-card-title--unread"
         )}
       >
         {message.title}
       </h3>
 
-      {/* Body preview */}
+      {/* Preview */}
       {message.body && (
-        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-          {message.body}
+        <p className="msg-card-preview">
+          {message.body.length > 160
+            ? message.body.slice(0, 160) + "…"
+            : message.body}
         </p>
       )}
 
       {/* Tags */}
       {message.tags.length > 0 && (
-        <div className="flex gap-1 mt-2">
+        <div className="msg-card-tags">
           {message.tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-            >
+            <span key={tag} className="msg-card-tag">
               #{tag}
             </span>
           ))}
+          {message.tags.length > 3 && (
+            <span className="msg-card-tag msg-card-tag--more">
+              +{message.tags.length - 3}
+            </span>
+          )}
         </div>
       )}
     </button>

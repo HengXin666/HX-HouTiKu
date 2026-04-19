@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Loader2,
   Shield,
+  Smartphone,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { copyToClipboard, cn } from "@/lib/utils";
@@ -67,76 +68,93 @@ export function SetupWizard() {
     setStep("done");
   };
 
+  const currentIndex = stepIndex(step);
+
   return (
-    <div className="lock-screen-container flex items-center justify-center bg-background px-6 py-8">
-      <div className="w-full max-w-md">
-        {/* Progress */}
-        <div className="mb-8 flex items-center justify-center gap-2">
+    <div className="setup-wizard-page">
+      <div className="setup-wizard-inner">
+        {/* Progress bar */}
+        <div className="setup-progress">
           {(["welcome", "password", "export", "push"] as const).map((s, i) => (
-            <div
-              key={s}
-              className={cn(
-                "h-1.5 w-8 rounded-full transition-colors",
-                stepIndex(step) >= i ? "bg-primary" : "bg-muted"
-              )}
-            />
+            <div key={s} className="setup-progress-segment">
+              <div
+                className={cn(
+                  "setup-progress-bar",
+                  currentIndex >= i && "setup-progress-bar--active",
+                  currentIndex > i && "setup-progress-bar--done"
+                )}
+              />
+              {i < 3 && <div className="setup-progress-gap" />}
+            </div>
           ))}
         </div>
 
         {/* Step: Welcome */}
         {step === "welcome" && (
-          <div className="text-center animate-[fade-in_0.3s_ease-out]">
-            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/10">
-              <Shield className="h-10 w-10 text-primary" />
+          <div className="setup-step setup-step--center">
+            <div className="setup-icon-ring setup-icon-ring--large">
+              <Shield className="setup-icon--lg" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight mb-2">
-              欢迎使用 HX-HouTiKu
-            </h1>
-            <p className="text-muted-foreground mb-8 text-sm leading-relaxed max-w-xs mx-auto">
-              端到端加密的统一消息推送平台。你的消息，只有你能看。
+
+            <h1 className="setup-title">欢迎使用 HX-HouTiKu</h1>
+            <p className="setup-subtitle">
+              端到端加密的统一消息推送平台
+              <br />
+              <span className="setup-subtitle-em">你的消息，只有你能看</span>
             </p>
 
-            <div className="space-y-4">
+            <div className="setup-card">
+              <label className="setup-field-label">
+                <Smartphone className="setup-field-label-icon" />
+                设备名称
+                <span className="setup-field-optional">（可选）</span>
+              </label>
               <input
                 type="text"
                 value={deviceName}
                 onChange={(e) => setDeviceName(e.target.value)}
-                placeholder="设备名称（可选，如 my-phone）"
-                className="w-full rounded-xl border border-border bg-input px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="例如 my-phone、work-laptop"
+                className="setup-input"
               />
-              <button
-                onClick={() => setStep("password")}
-                className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-              >
-                开始设置
-                <ArrowRight className="h-4 w-4" />
-              </button>
+              <p className="setup-field-hint">
+                为这台设备取个名字，方便你以后在多设备间区分。
+              </p>
             </div>
+
+            <button
+              onClick={() => setStep("password")}
+              className="setup-btn setup-btn--primary"
+            >
+              开始设置
+              <ArrowRight className="setup-btn-icon" />
+            </button>
           </div>
         )}
 
         {/* Step: Password */}
         {step === "password" && (
-          <div className="animate-[fade-in_0.3s_ease-out]">
-            <div className="text-center mb-6">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-                <Lock className="h-7 w-7 text-primary" />
+          <div className="setup-step">
+            <div className="setup-step-header">
+              <div className="setup-icon-ring">
+                <Lock className="setup-icon" />
               </div>
-              <h2 className="text-xl font-bold">创建主密码</h2>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h2 className="setup-step-title">创建主密码</h2>
+              <p className="setup-step-desc">
                 这是你的 App 解锁密码，请牢记
               </p>
             </div>
 
-            {/* Explanation */}
-            <div className="mb-5 rounded-xl bg-muted/50 border border-border px-4 py-3">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                🔐 主密码用于保护你的加密私钥。每次打开 App 时需要输入（也可以选择记住密码跳过）。
-                <strong className="text-foreground">请设一个你记得住的密码</strong>，比如常用的个人密码。
+            {/* Tip */}
+            <div className="setup-tip">
+              <span className="setup-tip-emoji">🔐</span>
+              <p className="setup-tip-text">
+                主密码用于保护你的加密私钥。每次打开 App 时需要输入（也可以选择记住密码跳过）。
+                <strong>请设一个你记得住的密码</strong>，比如常用的个人密码。
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="setup-card">
+              <label className="setup-field-label">主密码</label>
               <input
                 type="password"
                 value={password}
@@ -144,33 +162,33 @@ export function SetupWizard() {
                   setPassword(e.target.value);
                   setError(null);
                 }}
-                placeholder="设置你的主密码（至少 8 位）"
+                placeholder="至少 8 个字符"
                 autoFocus
                 enterKeyHint="next"
-                className="w-full rounded-xl border border-border bg-input px-4 py-3.5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="setup-input"
               />
 
               {/* Strength bar */}
               {password.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex gap-1">
+                <div className="setup-strength">
+                  <div className="setup-strength-bars">
                     {[1, 2, 3, 4].map((level) => (
                       <div
                         key={level}
                         className={cn(
-                          "h-1 flex-1 rounded-full transition-colors",
+                          "setup-strength-bar",
                           passwordStrength >= level
                             ? level <= 1
-                              ? "bg-destructive"
+                              ? "setup-strength-bar--weak"
                               : level <= 2
-                                ? "bg-priority-high"
-                                : "bg-priority-low"
-                            : "bg-muted"
+                                ? "setup-strength-bar--fair"
+                                : "setup-strength-bar--strong"
+                            : "setup-strength-bar--empty"
                         )}
                       />
                     ))}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
+                  <span className="setup-strength-label">
                     {passwordStrength <= 1
                       ? "弱"
                       : passwordStrength <= 2
@@ -178,10 +196,13 @@ export function SetupWizard() {
                         : passwordStrength <= 3
                           ? "强"
                           : "非常强"}
-                  </p>
+                  </span>
                 </div>
               )}
 
+              <div className="setup-field-divider" />
+
+              <label className="setup-field-label">确认密码</label>
               <input
                 type="password"
                 value={confirmPwd}
@@ -189,118 +210,115 @@ export function SetupWizard() {
                   setConfirmPwd(e.target.value);
                   setError(null);
                 }}
-                placeholder="再输入一次确认密码"
+                placeholder="再输入一次"
                 enterKeyHint="done"
-                className="w-full rounded-xl border border-border bg-input px-4 py-3.5 text-base placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="setup-input"
               />
-
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
-
-              <button
-                onClick={handleGenerateKeys}
-                disabled={loading || !password || !confirmPwd}
-                className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    生成密钥中...
-                  </>
-                ) : (
-                  <>
-                    <Key className="h-4 w-4" />
-                    生成密钥对
-                  </>
-                )}
-              </button>
             </div>
+
+            {error && (
+              <p className="setup-error">{error}</p>
+            )}
+
+            <button
+              onClick={handleGenerateKeys}
+              disabled={loading || !password || !confirmPwd}
+              className="setup-btn setup-btn--primary"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="setup-btn-icon animate-spin" />
+                  生成密钥中…
+                </>
+              ) : (
+                <>
+                  <Key className="setup-btn-icon" />
+                  生成密钥对
+                </>
+              )}
+            </button>
           </div>
         )}
 
         {/* Step: Export public key */}
         {step === "export" && (
-          <div className="animate-[fade-in_0.3s_ease-out]">
-            <div className="text-center mb-8">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-priority-low/10">
-                <Check className="h-7 w-7 text-priority-low" />
+          <div className="setup-step">
+            <div className="setup-step-header">
+              <div className="setup-icon-ring setup-icon-ring--success">
+                <Check className="setup-icon" />
               </div>
-              <h2 className="text-xl font-bold">密钥已生成</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                将公钥配置到推送 SDK 中
+              <h2 className="setup-step-title">密钥已生成 🎉</h2>
+              <p className="setup-step-desc">
+                将下面的公钥配置到推送 SDK 中
               </p>
             </div>
 
-            <div className="space-y-4">
-              {/* Public key display */}
-              <div className="rounded-xl border border-border bg-muted p-4">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-                  你的公钥
-                </p>
-                <p className="break-all font-mono text-xs text-foreground leading-relaxed">
-                  {publicKey}
-                </p>
+            <div className="setup-card">
+              <label className="setup-field-label">你的公钥</label>
+              <div className="setup-pubkey">
+                {publicKey}
               </div>
+            </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCopy}
-                  className="flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium hover:bg-muted transition-colors flex items-center justify-center gap-2"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="h-4 w-4 text-priority-low" />
-                      已复制
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4" />
-                      复制公钥
-                    </>
-                  )}
-                </button>
-                <button
-                  className="rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium hover:bg-muted transition-colors flex items-center justify-center gap-2"
-                  title="生成二维码（即将支持）"
-                  disabled
-                >
-                  <QrCode className="h-4 w-4" />
-                </button>
-              </div>
-
+            <div className="setup-actions-row">
               <button
-                onClick={() => setStep("push")}
-                className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                onClick={handleCopy}
+                className="setup-btn setup-btn--outline setup-btn--flex"
               >
-                下一步
-                <ArrowRight className="h-4 w-4" />
+                {copied ? (
+                  <>
+                    <Check className="setup-btn-icon setup-btn-icon--success" />
+                    已复制
+                  </>
+                ) : (
+                  <>
+                    <Copy className="setup-btn-icon" />
+                    复制公钥
+                  </>
+                )}
+              </button>
+              <button
+                className="setup-btn setup-btn--outline setup-btn--icon-only"
+                title="生成二维码（即将支持）"
+                disabled
+              >
+                <QrCode className="setup-btn-icon" />
               </button>
             </div>
+
+            <button
+              onClick={() => setStep("push")}
+              className="setup-btn setup-btn--primary"
+            >
+              下一步
+              <ArrowRight className="setup-btn-icon" />
+            </button>
           </div>
         )}
 
         {/* Step: Push permission */}
         {step === "push" && (
-          <div className="text-center animate-[fade-in_0.3s_ease-out]">
-            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-              <Bell className="h-7 w-7 text-primary" />
+          <div className="setup-step setup-step--center">
+            <div className="setup-icon-ring setup-icon-ring--large">
+              <Bell className="setup-icon--lg" />
             </div>
-            <h2 className="text-xl font-bold mb-2">开启推送通知</h2>
-            <p className="text-sm text-muted-foreground mb-8 max-w-xs mx-auto">
-              收到紧急消息时，即使 App 未打开也能第一时间通知你
+            <h2 className="setup-title">开启推送通知</h2>
+            <p className="setup-subtitle">
+              收到紧急消息时，即使 App 未打开
+              <br />
+              也能第一时间通知你
             </p>
 
-            <div className="space-y-3">
+            <div className="setup-btn-group">
               <button
                 onClick={handlePush}
-                className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.98]"
+                className="setup-btn setup-btn--primary"
               >
                 允许通知
               </button>
               <button
                 onClick={() => setStep("done")}
-                className="w-full rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
+                className="setup-btn setup-btn--ghost"
               >
                 稍后设置
               </button>
@@ -310,15 +328,15 @@ export function SetupWizard() {
 
         {/* Step: Done */}
         {step === "done" && (
-          <div className="text-center animate-[fade-in_0.3s_ease-out]">
-            <div className="text-6xl mb-6">🎉</div>
-            <h2 className="text-2xl font-bold mb-2">设置完成</h2>
-            <p className="text-sm text-muted-foreground mb-8">
+          <div className="setup-step setup-step--center">
+            <div className="setup-done-emoji">🎉</div>
+            <h2 className="setup-title">设置完成</h2>
+            <p className="setup-subtitle">
               现在配置推送 SDK，开始接收消息吧
             </p>
             <button
               onClick={() => window.location.replace("/")}
-              className="w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.98]"
+              className="setup-btn setup-btn--primary"
             >
               进入应用
             </button>

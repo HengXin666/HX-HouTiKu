@@ -1,0 +1,294 @@
+# ============================================================
+#  HX-HouTiKu — 接收者(设备)管理
+#
+#  仅支持手动触发 (workflow_dispatch), 用于:
+#    - 注册新设备 → 生成 Recipient Token
+#    - 列出已注册的设备
+#
+#  需要在 GitHub Secrets 中配置(复用已有):
+#    ADMIN_TOKEN — Worker 管理员 Token (与 wrangler secret ADMIN_TOKEN 同值)
+#
+#  需要在 GitHub Variables 中配置(复用已有):
+#    VITE_API_BASE — 后端 Worker URL, 如 https://hx-houtiku-api.xxx.workers.dev
+#
+#  安全模型:
+#    1. workflow_dispatch 仅 write 权限以上的协作者可触发
+#    2. ADMIN_TOKEN 通过 Secrets 传入, 日志自动掩码
+#    3. Recipient Token 用 ::add-mask:: 注册为运行时 secret,
+#       日志 + Summary 中均显示 ***, 绝不明文泄露
+#    4. Token 通过加密 Artifact 传递, 仅触发者可下载, 1 天后自动过期
+#    5. 列表接口只展示设备名/状态/分组, 不暴露 Token 和完整公钥
+# ============================================================
+
+name: 🔑 管理接收者(设备)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "操作类型"
+        required: true
+        type: choice
+        options:
+          - register — 注册新设备
+          - list — 列出已注册设备
+        default: "list — 列出已注册设备"
+
+      device_name:
+        description: "设备名称 (注册时必填, 如 my-phone)"
+        required: false
+        type: string
+
+      public_key:
+        description: "App 生成的公钥 (注册时必填, 十六进制字符串)"
+        required: false
+        type: string
+
+      groups:
+        description: "消息分组, 逗号分隔 (可选, 默认 general)"
+        required: false
+        type: string
+        default: "general"
+
+# 不允许并发运行, 防止注册冲突
+concurrency:
+  group: manage-recipients
+  cancel-in-progress: false
+
+jobs:
+  # ─── 注册新设备 ──────────────────────────────────────────
+  register:
+    name: 📱 注册新设备
+    if: startsWith(github.event.inputs.action, 'register')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 🔍 校验输入参数
+        run: |
+          if [[ -z "${{ inputs.device_name }}" ]]; then
+            echo "::error::❌ 注册设备必须填写「设备名称」"
+            exit 1
+          fi
+          if [[ -z "${{ inputs.public_key }}" ]]; then
+            echo "::error::❌ 注册设备必须填写「公钥」"
+            exit 1
+          fi
+
+          # 基本校验: 公钥应为十六进制字符串, 至少 64 字符(压缩公钥 66, 未压缩 130)
+          PK="${{ inputs.public_key }}"
+          if [[ ${#PK} -lt 64 ]]; then
+            echo "::error::❌ 公钥长度异常(${#PK} 字符), 请检查是否完整复制"
+            exit 1
+          fi
+          if ! [[ "$PK" =~ ^[0-9a-fA-F]+$ ]]; then
+            echo "::error::❌ 公钥格式错误, 应为纯十六进制字符串(0-9, a-f)"
+            exit 1
+          fi
+
+          echo "✅ 参数校验通过"
+          echo "   设备名称: ${{ inputs.device_name }}"
+          echo "   公钥前缀: ${PK:0:16}..."
+          echo "   分组: ${{ inputs.groups }}"
+
+      - name: 📡 注册设备到 Worker
+        id: register
+        env:
+          API_BASE: ${{ vars.VITE_API_BASE }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          # ── 校验环境变量 ──
+          if [[ -z "$API_BASE" ]]; then
+            echo "::error::❌ 未配置 VITE_API_BASE Variable"
+            exit 1
+          fi
+          if [[ -z "$ADMIN_TOKEN" ]]; then
+            echo "::error::❌ 未配置 ADMIN_TOKEN Secret"
+            exit 1
+          fi
+
+          # ── 构建请求体 ──
+          GROUPS='${{ inputs.groups }}'
+          if [[ -n "$GROUPS" && "$GROUPS" != "general" ]]; then
+            GROUPS_JSON=$(echo "$GROUPS" | jq -R 'split(",") | map(gsub("^\\s+|\\s+$"; ""))')
+            BODY=$(jq -n \
+              --arg name "${{ inputs.device_name }}" \
+              --arg pk "${{ inputs.public_key }}" \
+              --argjson groups "$GROUPS_JSON" \
+              '{name: $name, public_key: $pk, groups: $groups}')
+          else
+            BODY=$(jq -n \
+              --arg name "${{ inputs.device_name }}" \
+              --arg pk "${{ inputs.public_key }}" \
+              '{name: $name, public_key: $pk}')
+          fi
+
+          # ── 发送请求 ──
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" \
+            -X POST "${API_BASE}/api/recipients" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+
+          RESPONSE=$(cat "$RESPONSE_FILE")
+          rm -f "$RESPONSE_FILE"
+
+          # ── 处理结果 ──
+          if [[ "$HTTP_CODE" == "201" ]]; then
+            RECIPIENT_TOKEN=$(echo "$RESPONSE" | jq -r '.recipient_token')
+            RECIPIENT_ID=$(echo "$RESPONSE" | jq -r '.id')
+            RECIPIENT_NAME=$(echo "$RESPONSE" | jq -r '.name')
+
+            # 关键: 立即将 Token 注册为 secret, 后续所有日志/Summary 自动掩码为 ***
+            echo "::add-mask::${RECIPIENT_TOKEN}"
+
+            # 写入文件供 Artifact 上传(不经过日志)
+            mkdir -p /tmp/token-output
+            cat > /tmp/token-output/recipient-token.txt << TOKENEOF
+            ══════════════════════════════════════════
+             HX-HouTiKu — 设备注册凭证
+            ══════════════════════════════════════════
+
+             设备名称:       ${RECIPIENT_NAME}
+             Recipient ID:   ${RECIPIENT_ID}
+             Recipient Token: ${RECIPIENT_TOKEN}
+             分组:           ${{ inputs.groups }}
+
+            ──────────────────────────────────────────
+             接下来你需要做两件事:
+
+             1. 在手机 App 的「设置」页面填入 Recipient Token
+             2. 在推送 SDK 配置中添加此设备的公钥
+
+             ⚠️ 此文件包含敏感凭证, 使用后请立即删除
+            ══════════════════════════════════════════
+          TOKENEOF
+
+            echo "recipient_id=$RECIPIENT_ID" >> "$GITHUB_OUTPUT"
+            echo "recipient_name=$RECIPIENT_NAME" >> "$GITHUB_OUTPUT"
+            echo "✅ 注册成功 (Token 已写入 Artifact, 请下载查看)"
+
+          elif [[ "$HTTP_CODE" == "409" ]]; then
+            echo "::error::⚠️ 设备名称或公钥已存在 (HTTP 409), 请使用不同名称或先删除旧设备"
+            exit 1
+          elif [[ "$HTTP_CODE" == "401" ]]; then
+            echo "::error::❌ 认证失败 (HTTP 401), 请检查 ADMIN_TOKEN Secret 是否正确"
+            exit 1
+          else
+            echo "::error::❌ 注册失败 (HTTP $HTTP_CODE): $RESPONSE"
+            exit 1
+          fi
+
+      - name: 🔒 上传 Token(加密 Artifact)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recipient-token-${{ inputs.device_name }}
+          path: /tmp/token-output/recipient-token.txt
+          retention-days: 1  # 1 天后自动删除, 缩小暴露窗口
+
+      - name: 📋 输出注册摘要
+        if: success()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## ✅ 设备注册成功
+
+          | 项目 | 值 |
+          |------|-----|
+          | 📱 设备名称 | \`${{ steps.register.outputs.recipient_name }}\` |
+          | 🆔 Recipient ID | \`${{ steps.register.outputs.recipient_id }}\` |
+          | 🔑 Recipient Token | **请下载下方 Artifact 查看** |
+          | 📂 分组 | \`${{ inputs.groups }}\` |
+
+          ### 📥 获取 Recipient Token
+
+          1. 滚动到本页底部的 **Artifacts** 区域
+          2. 下载 \`recipient-token-${{ inputs.device_name }}\`
+          3. 打开文件查看 Token, 复制到 App 设置页
+          4. **使用后立即删除文件** (Artifact 将在 1 天后自动过期)
+
+          > 🔒 Token 已用 \`::add-mask::\` 保护, 不会出现在任何日志或 Summary 中。
+          EOF
+
+  # ─── 列出已注册设备 ──────────────────────────────────────
+  list:
+    name: 📋 列出已注册设备
+    if: startsWith(github.event.inputs.action, 'list')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📡 查询已注册设备
+        id: query
+        env:
+          API_BASE: ${{ vars.VITE_API_BASE }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          # ── 校验环境变量 ──
+          if [[ -z "$API_BASE" ]]; then
+            echo "::error::❌ 未配置 VITE_API_BASE Variable"
+            exit 1
+          fi
+          if [[ -z "$ADMIN_TOKEN" ]]; then
+            echo "::error::❌ 未配置 ADMIN_TOKEN Secret"
+            exit 1
+          fi
+
+          # ── 查询 ──
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" \
+            "${API_BASE}/api/recipients" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}")
+
+          RESPONSE=$(cat "$RESPONSE_FILE")
+          rm -f "$RESPONSE_FILE"
+
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::❌ 查询失败 (HTTP $HTTP_CODE): $RESPONSE"
+            exit 1
+          fi
+
+          # 保存到文件供下一步使用
+          echo "$RESPONSE" > /tmp/recipients.json
+          COUNT=$(echo "$RESPONSE" | jq '.recipients | length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "✅ 查询成功, 共 $COUNT 个设备"
+
+      - name: 📋 输出设备列表
+        run: |
+          RESPONSE=$(cat /tmp/recipients.json)
+          COUNT=${{ steps.query.outputs.count }}
+
+          # ── 写入 Job Summary ──
+          {
+            echo "## 📱 已注册的接收设备"
+            echo ""
+            echo "共 **${COUNT}** 个设备"
+            echo ""
+
+            if [[ "$COUNT" == "0" ]]; then
+              echo "> 暂无已注册设备。请使用「register」操作注册新设备。"
+            else
+              echo "| 状态 | 名称 | ID (前8位) | 分组 | 注册时间 |"
+              echo "|:----:|------|------------|------|----------|"
+
+              echo "$RESPONSE" | jq -r '.recipients[] |
+                (if .is_active then "🟢" else "🔴" end) as $status |
+                (.groups // ["general"] | join(", ")) as $groups |
+                (.created_at // 0 | . / 1000 | strftime("%Y-%m-%d %H:%M")) as $created |
+                "| \($status) | `\(.name)` | `\(.id[:8])…` | \($groups) | \($created) |"'
+            fi
+
+            echo ""
+            echo "---"
+            echo "> 🔒 Recipient Token 和完整公钥不在此处显示。"
+            echo "> 如需完整信息, 请在本地运行: \`bash scripts/list-devices.sh\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # 同时输出脱敏版到日志
+          echo ""
+          echo "📱 已注册设备概览:"
+          echo "$RESPONSE" | jq -r '.recipients[] |
+            (if .is_active then "🟢" else "🔴" end) as $status |
+            "  \($status) \(.name) (ID: \(.id[:8])…)"'

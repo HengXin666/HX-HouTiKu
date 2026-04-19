@@ -1,82 +1,92 @@
-import { Search, Settings, Lock, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { RefreshCw, Lock, Settings, ChevronLeft } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
+import { useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { useState, useRef } from "react";
 
 export function Header() {
   const lock = useAuthStore((s) => s.lock);
   const totalUnread = useMessageStore((s) => s.totalUnread);
-  const [showSearch, setShowSearch] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const recipientToken = useAuthStore((s) => s.recipientToken);
+  const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
+  const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
+  const loading = useMessageStore((s) => s.loading);
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const closeSearch = () => {
-    setShowSearch(false);
-    inputRef.current?.blur();
-  };
+  const handleRefresh = useCallback(() => {
+    if (!recipientToken || !privateKeyHex) return;
+    fetchAndDecrypt(recipientToken, privateKeyHex);
+  }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
+
+  const pageTitle = (() => {
+    if (location.pathname === "/groups") return "分组";
+    if (location.pathname === "/settings") return "设置";
+    if (location.pathname.startsWith("/message/")) return "消息详情";
+    if (location.pathname.startsWith("/groups/")) {
+      return decodeURIComponent(location.pathname.split("/groups/")[1]);
+    }
+    return "信息流";
+  })();
+
+  const isSubPage =
+    location.pathname !== "/" &&
+    location.pathname !== "/groups" &&
+    location.pathname !== "/settings";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="flex h-14 items-center justify-between px-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">
-            HX-HouTiKu
-          </h1>
-          {totalUnread > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground">
-              {totalUnread > 99 ? "99+" : totalUnread}
-            </span>
+    <header className="app-header">
+      <div className="app-header-inner">
+        {/* Left */}
+        <div className="app-header-left">
+          {isSubPage ? (
+            <button
+              onClick={() => navigate(-1)}
+              className="app-header-back"
+              aria-label="返回"
+            >
+              <ChevronLeft className="app-header-back-icon" />
+            </button>
+          ) : null}
+
+          <h1 className="app-header-title">{pageTitle}</h1>
+
+          {totalUnread > 0 && location.pathname === "/" && (
+            <span className="app-header-badge">{totalUnread > 99 ? "99+" : totalUnread}</span>
           )}
         </div>
 
-        <div className="flex items-center gap-1">
+        {/* Right */}
+        <div className="app-header-right">
           <button
-            onClick={() => setShowSearch(!showSearch)}
-            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="搜索"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="app-header-action"
+            title="刷新消息"
           >
-            <Search className="h-5 w-5" />
+            <RefreshCw
+              className={cn("app-header-action-icon", loading && "animate-spin")}
+            />
           </button>
 
           <Link
             to="/settings"
-            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="设置"
+            className="app-header-action app-header-action--hide-desktop"
+            title="设置"
           >
-            <Settings className="h-5 w-5" />
+            <Settings className="app-header-action-icon" />
           </Link>
 
           <button
             onClick={lock}
-            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="锁定"
+            className="app-header-action app-header-action--hide-desktop"
+            title="锁定"
           >
-            <Lock className="h-5 w-5" />
+            <Lock className="app-header-action-icon" />
           </button>
         </div>
       </div>
-
-      {/* Search bar (expandable) */}
-      {showSearch && (
-        <div className="border-t border-border px-4 py-2 animate-[slide-up_0.2s_ease-out] flex items-center gap-2">
-          <input
-            ref={inputRef}
-            type="search"
-            placeholder="搜索消息..."
-            autoFocus
-            enterKeyHint="search"
-            className="flex-1 rounded-lg bg-input px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <button
-            onClick={closeSearch}
-            className="shrink-0 rounded-lg p-2 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="关闭搜索"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
     </header>
   );
 }

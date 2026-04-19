@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Switch, Dialog, Toast } from "antd-mobile";
 import {
   User,
   Bell,
@@ -9,13 +10,19 @@ import {
   Moon,
   Sun,
   Monitor,
-  ChevronRight,
   AlertTriangle,
+  Key,
+  Server,
+  Edit3,
+  ChevronRight,
+  Smartphone,
+  Fingerprint,
+  Type,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { resetAll, clearMessages } from "@/lib/db";
-import { copyToClipboard, cn } from "@/lib/utils";
+import { copyToClipboard } from "@/lib/utils";
 
 export function Settings() {
   const publicKeyHex = useAuthStore((s) => s.publicKeyHex);
@@ -24,13 +31,21 @@ export function Settings() {
   const resetAuth = useAuthStore((s) => s.reset);
   const rememberPassword = useAuthStore((s) => s.rememberPassword);
   const setRememberPassword = useAuthStore((s) => s.setRememberPassword);
+  const recipientToken = useAuthStore((s) => s.recipientToken);
+  const setRecipientToken = useAuthStore((s) => s.setRecipientToken);
 
   const theme = useSettingsStore((s) => s.theme);
   const fontSize = useSettingsStore((s) => s.fontSize);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const setFontSize = useSettingsStore((s) => s.setFontSize);
+  const apiBase = useSettingsStore((s) => s.apiBase);
+  const setApiBase = useSettingsStore((s) => s.setApiBase);
 
   const [copied, setCopied] = useState(false);
+  const [tokenInput, setTokenInput] = useState(recipientToken ?? "");
+  const [apiInput, setApiInput] = useState(apiBase);
+  const [editingToken, setEditingToken] = useState(false);
+  const [editingApi, setEditingApi] = useState(false);
 
   const handleCopyKey = async () => {
     if (!publicKeyHex) return;
@@ -38,98 +53,264 @@ export function Settings() {
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      Toast.show({ content: "已复制公钥", position: "bottom" });
     }
   };
 
+  const handleSaveToken = async () => {
+    const trimmed = tokenInput.trim();
+    if (!trimmed) {
+      Toast.show({ content: "Token 不能为空", position: "bottom" });
+      return;
+    }
+    const recipientId = trimmed.startsWith("rt_") ? trimmed.slice(3) : trimmed;
+    const token = trimmed.startsWith("rt_") ? trimmed : `rt_${trimmed}`;
+    await setRecipientToken(token, recipientId);
+    setEditingToken(false);
+    Toast.show({ content: "Recipient Token 已保存", position: "bottom" });
+  };
+
+  const handleSaveApiBase = async () => {
+    let trimmed = apiInput.trim();
+    if (trimmed.endsWith("/")) trimmed = trimmed.slice(0, -1);
+    await setApiBase(trimmed);
+    setEditingApi(false);
+    Toast.show({
+      content: trimmed ? "API 地址已保存，刷新后生效" : "已恢复默认 API 地址",
+      position: "bottom",
+    });
+  };
+
   const handleClearCache = async () => {
-    if (!window.confirm("确定清除本地消息缓存？")) return;
+    const result = await Dialog.confirm({ content: "确定清除本地消息缓存？" });
+    if (!result) return;
     await clearMessages();
     window.location.reload();
   };
 
   const handleFullReset = async () => {
-    if (!window.confirm("⚠️ 确定重置所有数据？密钥将永久丢失，无法恢复！")) return;
-    if (!window.confirm("最后确认：此操作不可撤销。")) return;
+    const r1 = await Dialog.confirm({
+      content: "⚠️ 确定重置所有数据？密钥将永久丢失，无法恢复！",
+    });
+    if (!r1) return;
+    const r2 = await Dialog.confirm({ content: "最后确认：此操作不可撤销。" });
+    if (!r2) return;
     await resetAll();
     resetAuth();
   };
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
-      {/* Account */}
-      <SettingsSection icon={User} title="账户">
-        <SettingsRow label="设备名称" value={deviceName ?? "default"} />
-        <SettingsRow
-          label="公钥"
-          value={
-            publicKeyHex
-              ? `${publicKeyHex.slice(0, 16)}...${publicKeyHex.slice(-8)}`
-              : "—"
-          }
-          action={
+    <div className="settings-page">
+      {/* ── Connection ── */}
+      <div className="settings-group">
+        <div className="settings-group-label">连接</div>
+        <div className="settings-card">
+          <div className="settings-field">
+            <div className="settings-field-label">
+              <Key /> Recipient Token
+            </div>
+            <div className="settings-field-hint">
+              从服务端注册设备后获得（格式：<code>rt_uuid</code>）
+            </div>
+            {editingToken ? (
+              <div className="settings-field-form">
+                <input
+                  type="text"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  placeholder="rt_xxxxxxxx-xxxx-xxxx..."
+                  className="settings-field-input"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveToken}
+                  className="settings-field-btn settings-field-btn--save"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingToken(false);
+                    setTokenInput(recipientToken ?? "");
+                  }}
+                  className="settings-field-btn settings-field-btn--cancel"
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <div className="settings-field-display">
+                <span className="settings-field-value">
+                  {recipientToken ?? "未配置"}
+                </span>
+                <button
+                  onClick={() => {
+                    setTokenInput(recipientToken ?? "");
+                    setEditingToken(true);
+                  }}
+                  className="settings-field-edit-btn"
+                  title="编辑"
+                >
+                  <Edit3 />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="settings-field">
+            <div className="settings-field-label">
+              <Server /> API 地址
+            </div>
+            <div className="settings-field-hint">
+              后端 Worker 的完整 URL，留空使用默认值
+            </div>
+            {editingApi ? (
+              <div className="settings-field-form">
+                <input
+                  type="url"
+                  value={apiInput}
+                  onChange={(e) => setApiInput(e.target.value)}
+                  placeholder="https://your-worker.example.com"
+                  className="settings-field-input"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveApiBase}
+                  className="settings-field-btn settings-field-btn--save"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingApi(false);
+                    setApiInput(apiBase);
+                  }}
+                  className="settings-field-btn settings-field-btn--cancel"
+                >
+                  取消
+                </button>
+              </div>
+            ) : (
+              <div className="settings-field-display">
+                <span className="settings-field-value">
+                  {apiBase || "(默认)"}
+                </span>
+                <button
+                  onClick={() => {
+                    setApiInput(apiBase);
+                    setEditingApi(true);
+                  }}
+                  className="settings-field-edit-btn"
+                  title="编辑"
+                >
+                  <Edit3 />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Account ── */}
+      <div className="settings-group">
+        <div className="settings-group-label">账户</div>
+        <div className="settings-card">
+          <div className="settings-item">
+            <div className="settings-item-icon settings-item-icon--indigo">
+              <Smartphone />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">设备名称</div>
+            </div>
+            <span className="settings-item-value">
+              {deviceName ?? "default"}
+            </span>
+          </div>
+
+          <div className="settings-item">
+            <div className="settings-item-icon settings-item-icon--slate">
+              <Fingerprint />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">公钥</div>
+            </div>
+            <span className="settings-item-value">
+              {publicKeyHex
+                ? `${publicKeyHex.slice(0, 10)}…${publicKeyHex.slice(-4)}`
+                : "—"}
+            </span>
             <button
               onClick={handleCopyKey}
-              className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              className="settings-field-edit-btn"
+              title="复制公钥"
             >
-              {copied ? (
-                <Check className="h-4 w-4 text-priority-low" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
+              {copied ? <Check /> : <Copy />}
             </button>
-          }
-        />
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-          <div>
-            <span className="text-sm">自动解锁</span>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              记住密码，打开 App 时跳过输入
-            </p>
           </div>
-          <label className="relative inline-flex cursor-pointer">
-            <input
-              type="checkbox"
-              checked={rememberPassword}
-              onChange={(e) => setRememberPassword(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-10 h-5.5 bg-muted rounded-full peer peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4.5 after:w-4.5 after:transition-transform peer-checked:after:translate-x-[18px]" />
-          </label>
-        </div>
-      </SettingsSection>
 
-      {/* Appearance */}
-      <SettingsSection icon={Palette} title="外观">
-        <div className="px-4 py-3">
-          <p className="text-sm font-medium mb-3">主题</p>
-          <div className="flex gap-2">
+          <div className="settings-item">
+            <div className="settings-item-icon settings-item-icon--green">
+              <User />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">自动解锁</div>
+              <div className="settings-item-desc">
+                记住密码，打开时跳过输入
+              </div>
+            </div>
+            <div className="settings-item-action">
+              <Switch
+                checked={rememberPassword}
+                onChange={setRememberPassword}
+                style={
+                  { "--checked-color": "var(--color-primary)" } as React.CSSProperties
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Appearance ── */}
+      <div className="settings-group">
+        <div className="settings-group-label">外观</div>
+        <div className="settings-card">
+          <div className="settings-item">
+            <div className="settings-item-icon settings-item-icon--indigo">
+              <Palette />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">主题</div>
+            </div>
+          </div>
+          <div className="settings-theme-row">
             {(
               [
                 { value: "dark", icon: Moon, label: "深色" },
                 { value: "light", icon: Sun, label: "浅色" },
-                { value: "system", icon: Monitor, label: "跟随系统" },
+                { value: "system", icon: Monitor, label: "系统" },
               ] as const
             ).map(({ value, icon: Icon, label }) => (
               <button
                 key={value}
                 onClick={() => setTheme(value)}
-                className={cn(
-                  "flex flex-1 flex-col items-center gap-1.5 rounded-xl border py-3 text-xs font-medium transition-all",
-                  theme === value
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground"
-                )}
+                className={`settings-theme-btn${theme === value ? " settings-theme-btn--active" : ""}`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon />
                 {label}
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="px-4 py-3 border-t border-border">
-          <p className="text-sm font-medium mb-3">字体大小</p>
-          <div className="flex gap-2">
+          <div className="settings-item">
+            <div className="settings-item-icon settings-item-icon--amber">
+              <Type />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">字体大小</div>
+            </div>
+          </div>
+          <div className="settings-fontsize-row">
             {(
               [
                 { value: "small", label: "小" },
@@ -140,119 +321,83 @@ export function Settings() {
               <button
                 key={value}
                 onClick={() => setFontSize(value)}
-                className={cn(
-                  "flex-1 rounded-xl border py-2.5 text-sm font-medium transition-all",
-                  fontSize === value
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground"
-                )}
+                className={`settings-fontsize-btn${fontSize === value ? " settings-fontsize-btn--active" : ""}`}
               >
                 {label}
               </button>
             ))}
           </div>
         </div>
-      </SettingsSection>
+      </div>
 
-      {/* Notification */}
-      <SettingsSection icon={Bell} title="通知">
-        <SettingsRow
-          label="Web Push"
-          value={
-            "Notification" in window
-              ? Notification.permission === "granted"
-                ? "✅ 已开启"
-                : "未开启"
-              : "不支持"
-          }
-        />
-        <div className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
-          <p>urgent → 持续震动 · high → 震动 · default → 静默 · low/debug → 不推送</p>
+      {/* ── Notification ── */}
+      <div className="settings-group">
+        <div className="settings-group-label">通知</div>
+        <div className="settings-card">
+          <div className="settings-item">
+            <div className="settings-item-icon settings-item-icon--amber">
+              <Bell />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">Web Push</div>
+            </div>
+            <span className="settings-item-value" style={{ fontFamily: "inherit" }}>
+              {"Notification" in window
+                ? Notification.permission === "granted"
+                  ? "✅ 已开启"
+                  : "未开启"
+                : "不支持"}
+            </span>
+          </div>
         </div>
-      </SettingsSection>
+        <div className="settings-group-footer">
+          urgent → 持续震动 · high → 震动 · default → 静默 · low/debug → 不推送
+        </div>
+      </div>
 
-      {/* Data */}
-      <SettingsSection icon={Trash2} title="数据">
-        <button
-          onClick={handleClearCache}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm hover:bg-muted transition-colors"
-        >
-          <span>清除本地消息缓存</span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </button>
-        <button
-          onClick={handleFullReset}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-destructive hover:bg-destructive/10 transition-colors border-t border-border"
-        >
-          <span className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            重置所有数据
-          </span>
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </SettingsSection>
+      {/* ── Data ── */}
+      <div className="settings-group">
+        <div className="settings-group-label">数据</div>
+        <div className="settings-card">
+          <button
+            onClick={handleClearCache}
+            className="settings-item settings-item--btn"
+          >
+            <div className="settings-item-icon settings-item-icon--slate">
+              <Trash2 />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">清除本地消息缓存</div>
+            </div>
+            <ChevronRight className="settings-item-chevron" />
+          </button>
+
+          <button
+            onClick={handleFullReset}
+            className="settings-item settings-item--btn settings-item--destructive"
+          >
+            <div className="settings-item-icon settings-item-icon--red">
+              <AlertTriangle />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">重置所有数据</div>
+              <div className="settings-item-desc">密钥将永久丢失，无法恢复</div>
+            </div>
+            <ChevronRight className="settings-item-chevron" />
+          </button>
+        </div>
+      </div>
 
       {/* Footer */}
-      <div className="text-center py-4">
-        <p className="text-[11px] text-muted-foreground">
-          v1.0.0 · E2E Encrypted ·{" "}
-          <a
-            href="https://github.com/HX-HouTiKu"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-foreground underline underline-offset-2"
-          >
-            GitHub
-          </a>
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// --- Sub-components ---
-
-function SettingsSection({
-  icon: Icon,
-  title,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="flex items-center gap-2 mb-2 px-1">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          {title}
-        </h3>
-      </div>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function SettingsRow({
-  label,
-  value,
-  action,
-}: {
-  label: string;
-  value: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between px-4 py-3 [&:not(:first-child)]:border-t border-border">
-      <span className="text-sm">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground font-mono">
-          {value}
-        </span>
-        {action}
+      <div className="settings-footer">
+        v1.0.0 · E2E Encrypted ·{" "}
+        <a
+          href="https://github.com/HX-HouTiKu"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GitHub
+        </a>
       </div>
     </div>
   );

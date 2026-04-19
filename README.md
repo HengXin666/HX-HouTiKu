@@ -252,13 +252,52 @@ npx wrangler pages deploy dist --project-name hx-houtiku
 
 1. 用手机/电脑浏览器打开前端 URL
 2. 按照"设置向导"一步步操作: 
-   - **设置主密码**: 用于加密你的私钥, 至少 12 个字符
+   - **设置主密码**: 用于加密你的私钥, 至少 8 个字符
    - **生成密钥对**: 自动生成 ECIES 密钥对
    - **复制公钥**: 这个公钥要配置到推送 SDK 中
-   - **注册接收者**: 输入你的用户名, 把公钥注册到后端
 3. 启用 Web Push 通知(可选, 浏览器会弹出授权请求)
 
 **⚠️ 妥善保管你的主密码! ** 密钥由密码保护, 忘记密码 = 无法解密历史消息。
+
+### 第六步: 注册设备(关键步骤! )
+
+App 生成密钥后, 你还需要把设备注册到 Worker 后端, 否则收不到任何消息。
+
+**方式一: 使用注册脚本(推荐)**
+
+```bash
+# 1. 设置环境变量
+export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.你的子域名.workers.dev"
+export HX_HOUTIKU_TOKEN="你设置的ADMIN_TOKEN"
+
+# 2. 运行注册脚本(交互式, 按提示输入设备名和公钥)
+bash scripts/register-device.sh
+
+# 或者一行命令搞定:
+bash scripts/register-device.sh --name "my-phone" --pubkey "04a1b2c3...App显示的公钥"
+```
+
+注册成功后, 脚本会输出 **Recipient Token** (格式: `rt_xxxx-xxxx-xxxx`), 你需要:
+
+1. 在 App 的 **设置页** 填入这个 Recipient Token
+2. 在推送 SDK 的配置中添加这台设备的**公钥**
+
+**方式二: 手动 cURL**
+
+```bash
+curl -X POST https://hx-houtiku-api.你的子域名.workers.dev/api/recipients \
+  -H "Authorization: Bearer 你的ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-phone", "public_key": "04a1b2c3...App显示的公钥"}'
+```
+
+**查看已注册的设备:**
+
+```bash
+bash scripts/list-devices.sh
+```
+
+> 💡 **为什么需要这一步?** 这是安全设计——只有你(掌握管理员 Token 的人)才能把设备注册为消息接收者。任何人都可以下载 App, 但没有你的管理员 Token, 就无法注册, 也就收不到任何消息。
 
 ---
 
@@ -494,7 +533,9 @@ HX-HouTiKu/
 │   │   └── cli.py           # 命令行入口
 │   └── pyproject.toml
 ├── scripts/             # Shell 工具脚本
-│   └── hx-houtiku.sh       # Bash 推送脚本
+│   ├── hx-houtiku.sh       # Bash 推送脚本
+│   ├── register-device.sh  # 设备注册脚本
+│   └── list-devices.sh     # 查看已注册设备
 └── docs/                # 文档
     ├── DEPLOYMENT.md        # 详细部署教程
     ├── SDK.md               # SDK 参考手册
@@ -534,6 +575,7 @@ cd sdk/python && uv sync && uv run pytest
 | 🌐 部署前端 | `.github/workflows/deploy-frontend.yml` | `frontend/` 目录变更 | 类型检查 → 构建 PWA → 部署到 Pages |
 | 📱 构建 App | `.github/workflows/build-android.yml` | 推送 `v*` 标签 / 手动触发 | 构建签名 APK → 上传到 GitHub Release |
 | 🔍 CI 检查 | `.github/workflows/ci.yml` | 所有 push / PR | 后端+前端+SDK 代码质量检查 |
+| 🔑 管理接收者 | `.github/workflows/manage-recipients.yml` | **仅手动触发** | 注册新设备 / 列出已注册设备 |
 
 ### 配置步骤(5 分钟)
 
@@ -567,6 +609,7 @@ npx wrangler whoami
 |------|------|-----|
 | **Secret** | `CLOUDFLARE_API_TOKEN` | 第 1 步拿到的 API Token |
 | **Secret** | `CLOUDFLARE_ACCOUNT_ID` | 第 2 步拿到的 Account ID |
+| **Secret** | `ADMIN_TOKEN` | Worker 管理员 Token (与 `wrangler secret put ADMIN_TOKEN` 同值) |
 | **Secret** | `ANDROID_KEYSTORE_BASE64` | 签名密钥库 Base64 (见下方生成方式) |
 | **Secret** | `ANDROID_KEYSTORE_PASSWORD` | 密钥库密码 |
 | **Secret** | `ANDROID_KEY_ALIAS` | 签名密钥别名 |

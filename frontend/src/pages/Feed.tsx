@@ -1,19 +1,22 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { PullToRefresh, Toast } from "antd-mobile";
+import { WifiOff, Inbox, AlertCircle, RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
-import { useMessageStore, type Message } from "@/stores/message-store";
+import { useMessageStore } from "@/stores/message-store";
 import { MessageList } from "@/components/message/MessageList";
-import { PRIORITY_CONFIG, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const TABS = [
-  { key: "all", label: "全部" },
-  { key: "urgent", label: "🔴 紧急" },
-  { key: "high", label: "🟠 重要" },
-  { key: "default", label: "🔵 普通" },
-  { key: "low", label: "🟢 低优" },
-  { key: "debug", label: "⚪ 调试" },
+  { key: "all", label: "全部", emoji: "" },
+  { key: "urgent", label: "紧急", emoji: "🔴" },
+  { key: "high", label: "重要", emoji: "🟠" },
+  { key: "default", label: "普通", emoji: "🔵" },
+  { key: "low", label: "低优", emoji: "🟢" },
+  { key: "debug", label: "调试", emoji: "⚪" },
 ] as const;
+
+const MIN_REFRESH_INTERVAL = 5_000;
 
 export function Feed() {
   const { groupName } = useParams();
@@ -22,85 +25,140 @@ export function Feed() {
 
   const messages = useMessageStore((s) => s.messages);
   const loading = useMessageStore((s) => s.loading);
+  const error = useMessageStore((s) => s.error);
   const activeTab = useMessageStore((s) => s.activeTab);
   const setActiveTab = useMessageStore((s) => s.setActiveTab);
   const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
   const loadCached = useMessageStore((s) => s.loadCached);
 
-  const refresh = useCallback(() => {
-    if (!recipientToken || !privateKeyHex) return;
-    fetchAndDecrypt(recipientToken, privateKeyHex);
+  const lastRefreshRef = useRef(0);
+  const [noToken, setNoToken] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!recipientToken || !privateKeyHex) {
+      setNoToken(true);
+      return;
+    }
+    setNoToken(false);
+
+    const now = Date.now();
+    if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL) {
+      Toast.show({ content: "操作太频繁，请稍后再试", position: "bottom" });
+      return;
+    }
+    lastRefreshRef.current = now;
+
+    await fetchAndDecrypt(recipientToken, privateKeyHex);
   }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
 
   useEffect(() => {
     loadCached();
-    refresh();
-  }, [loadCached, refresh]);
+    if (recipientToken && privateKeyHex) {
+      fetchAndDecrypt(recipientToken, privateKeyHex);
+      lastRefreshRef.current = Date.now();
+    } else {
+      setNoToken(true);
+    }
+  }, [loadCached, recipientToken, privateKeyHex, fetchAndDecrypt]);
 
-  // Filter messages
+  // Filter
   const filtered = messages.filter((m) => {
     if (groupName && m.group !== groupName) return false;
     if (activeTab !== "all" && m.priority !== activeTab) return false;
     return true;
   });
 
-  // Count per priority
-  const counts = {
-    all: messages.length,
-    urgent: messages.filter((m) => m.priority === "urgent").length,
-    high: messages.filter((m) => m.priority === "high").length,
-    default: messages.filter((m) => m.priority === "default").length,
-    low: messages.filter((m) => m.priority === "low").length,
-    debug: messages.filter((m) => m.priority === "debug").length,
+  const scopedMsgs = groupName
+    ? messages.filter((m) => m.group === groupName)
+    : messages;
+
+  const counts: Record<string, number> = {
+    all: scopedMsgs.length,
+    urgent: scopedMsgs.filter((m) => m.priority === "urgent").length,
+    high: scopedMsgs.filter((m) => m.priority === "high").length,
+    default: scopedMsgs.filter((m) => m.priority === "default").length,
+    low: scopedMsgs.filter((m) => m.priority === "low").length,
+    debug: scopedMsgs.filter((m) => m.priority === "debug").length,
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Group title */}
-      {groupName && (
-        <h2 className="text-lg font-semibold">
-          {groupName}
-        </h2>
-      )}
-
-      {/* Priority tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-        {TABS.map(({ key, label }) => {
-          const count = counts[key as keyof typeof counts];
-          return (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={cn(
-                "shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all whitespace-nowrap",
-                activeTab === key
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {label}
-              {count > 0 && (
-                <span className="ml-1 opacity-70">({count})</span>
-              )}
-            </button>
-          );
-        })}
-
-        {/* Refresh button */}
-        <button
-          onClick={refresh}
-          disabled={loading}
-          className="ml-auto shrink-0 rounded-lg p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          title="刷新"
-        >
-          <RefreshCw
-            className={cn("h-4 w-4", loading && "animate-spin")}
-          />
-        </button>
+  // No token
+  if (noToken && messages.length === 0) {
+    return (
+      <div className="feed-empty-state">
+        <div className="feed-empty-icon-ring">
+          <WifiOff className="feed-empty-icon" />
+        </div>
+        <h3 className="feed-empty-title">未配置 Recipient Token</h3>
+        <p className="feed-empty-desc">
+          前往 <strong>设置 → 认证配置</strong> 填写你的 Recipient Token 后即可接收消息。
+        </p>
       </div>
+    );
+  }
 
-      {/* Message list */}
-      <MessageList messages={filtered} loading={loading} />
-    </div>
+  return (
+    <PullToRefresh
+      onRefresh={refresh}
+      renderText={(status) => {
+        const textMap: Record<string, string> = {
+          pulling: "下拉刷新",
+          canRelease: "释放刷新",
+          refreshing: "加载中…",
+          complete: "刷新完成",
+        };
+        return (
+          <span className="feed-pull-text">{textMap[status] ?? ""}</span>
+        );
+      }}
+    >
+      <div className="feed-container">
+        {/* Group title */}
+        {groupName && (
+          <h2 className="feed-group-title">{groupName}</h2>
+        )}
+
+        {/* Priority filter tabs */}
+        <div className="feed-tabs">
+          {TABS.map(({ key, label, emoji }) => {
+            const count = counts[key] ?? 0;
+            const isActive = activeTab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={cn(
+                  "feed-tab",
+                  isActive && "feed-tab--active"
+                )}
+              >
+                {emoji && <span className="feed-tab-emoji">{emoji}</span>}
+                <span>{label}</span>
+                {count > 0 && (
+                  <span className="feed-tab-count">{count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="feed-error">
+            <AlertCircle className="feed-error-icon" />
+            <div className="feed-error-content">
+              <p className="feed-error-title">获取消息失败</p>
+              <p className="feed-error-msg">{error}</p>
+            </div>
+            <button onClick={refresh} className="feed-error-retry">
+              <RefreshCw className="feed-error-retry-icon" />
+              重试
+            </button>
+          </div>
+        )}
+
+        {/* Message list */}
+        <MessageList messages={filtered} loading={loading} />
+      </div>
+    </PullToRefresh>
   );
 }

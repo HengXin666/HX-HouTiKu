@@ -1,5 +1,5 @@
 /**
- * Settings store — theme, notification preferences, etc.
+ * Settings store — theme, notification preferences, API configuration.
  */
 
 import { create } from "zustand";
@@ -12,27 +12,31 @@ interface SettingsState {
   theme: Theme;
   fontSize: FontSize;
   pushEnabled: boolean;
+  apiBase: string;
 
   // Actions
   initialize: () => Promise<void>;
   setTheme: (theme: Theme) => Promise<void>;
   setFontSize: (size: FontSize) => Promise<void>;
   setPushEnabled: (enabled: boolean) => Promise<void>;
+  setApiBase: (url: string) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: "dark",
   fontSize: "medium",
   pushEnabled: false,
+  apiBase: "",
 
   initialize: async () => {
     const theme = (await getPref<Theme>("theme")) ?? "dark";
     const fontSize = (await getPref<FontSize>("fontSize")) ?? "medium";
     const pushEnabled = (await getPref<boolean>("pushEnabled")) ?? false;
+    const apiBase = (await getPref<string>("apiBase")) ?? "";
 
     applyTheme(theme);
     applyFontSize(fontSize);
-    set({ theme, fontSize, pushEnabled });
+    set({ theme, fontSize, pushEnabled, apiBase });
   },
 
   setTheme: async (theme) => {
@@ -50,6 +54,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setPushEnabled: async (enabled) => {
     await setPref("pushEnabled", enabled);
     set({ pushEnabled: enabled });
+  },
+
+  setApiBase: async (url) => {
+    await setPref("apiBase", url);
+    set({ apiBase: url });
   },
 }));
 

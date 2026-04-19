@@ -12,27 +12,22 @@ export function AppShell({ children }: AppShellProps) {
     const vv = window.visualViewport;
     if (!vv) return;
 
-    const KEYBOARD_THRESHOLD = 150; // px difference to consider keyboard open
+    const KEYBOARD_THRESHOLD = 150;
 
     const update = () => {
       const fullHeight = window.innerHeight;
       const viewportHeight = vv.height;
       const keyboardOpen = fullHeight - viewportHeight > KEYBOARD_THRESHOLD;
-
-      // Set CSS variable for visual viewport height
       document.documentElement.style.setProperty(
         "--visual-vh",
         `${viewportHeight * 0.01}px`
       );
-
-      // Toggle keyboard-open class
       document.documentElement.classList.toggle("keyboard-open", keyboardOpen);
     };
 
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
-
     return () => {
       vv.removeEventListener("resize", update);
       vv.removeEventListener("scroll", update);
@@ -42,19 +37,22 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   return (
-    <div className="flex min-h-dvh bg-background">
-      {/* Desktop sidebar */}
-      <Sidebar className="hidden md:flex" />
+    <div className="app-shell">
+      {/* Desktop sidebar — hidden on mobile via CSS */}
+      <Sidebar />
 
-      <div className="flex flex-1 flex-col min-w-0">
+      {/* Main column */}
+      <div className="app-shell-main">
         <Header />
 
-        <main className="main-content flex-1 overflow-y-auto px-4 pb-20 md:pb-4 pt-2">
-          {children}
+        <main className="app-shell-content">
+          <div className="app-shell-container">
+            {children}
+          </div>
         </main>
 
-        {/* Mobile bottom nav */}
-        <BottomNav className="md:hidden" />
+        {/* Mobile bottom nav — hidden on desktop via CSS */}
+        <BottomNav />
       </div>
     </div>
   );

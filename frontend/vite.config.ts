@@ -49,5 +49,19 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true, // Listen on all interfaces for LAN access
+    // Proxy API requests to the local Cloudflare Worker dev server.
+    // Start the worker with: cd ../worker && pnpm dev
+    proxy: {
+      "/api": {
+        target: "http://localhost:8787",
+        changeOrigin: true,
+        // Only active when VITE_API_BASE is not set
+      },
+    },
+  },
+  preview: {
+    port: 4173,
+    host: true,
   },
 });

@@ -22,6 +22,8 @@
     "@capacitor/push-notifications": "^6.0.0",
     "@capacitor/splash-screen": "^6.0.0",
     "@capacitor/status-bar": "^6.0.0",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "antd-mobile": "^5",
     "eciesjs": "^0.4.14",
     "idb": "^8.0.2",
     "lucide-react": "^0.475.0",
@@ -29,6 +31,9 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^9.0.3",
     "react-router-dom": "^7.2.0",
+    "react-syntax-highlighter": "^16.1.1",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
@@ -36,13 +41,13 @@
     "@tailwindcss/vite": "^4.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vite-pwa/assets-generator": "^0.2.6",
     "@vitejs/plugin-react": "^4.4.0",
     "autoprefixer": "^10.4.20",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.8.0",
     "vite": "^6.3.0",
     "vite-plugin-pwa": "^0.21.1",
-    "@vite-pwa/assets-generator": "^0.2.6",
     "workbox-precaching": "^7.3.0",
     "workbox-routing": "^7.3.0",
     "workbox-strategies": "^7.3.0"

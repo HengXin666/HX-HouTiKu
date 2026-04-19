@@ -1,8 +1,25 @@
 /**
  * API client for communicating with the Cloudflare Worker backend.
+ * Supports dynamic API base URL from settings or env var.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+import { getPref } from "./db";
+
+/** Get the API base URL — prioritizes settings store, falls back to env var. */
+let _cachedApiBase: string | undefined;
+
+export async function getApiBase(): Promise<string> {
+  if (_cachedApiBase !== undefined) return _cachedApiBase;
+  const stored = await getPref<string>("apiBase");
+  const base: string = stored || import.meta.env.VITE_API_BASE || "";
+  _cachedApiBase = base;
+  return base;
+}
+
+/** Invalidate the cached API base (call after user changes it in settings). */
+export function invalidateApiBaseCache() {
+  _cachedApiBase = undefined;
+}
 
 interface ApiOptions {
   token?: string;
@@ -23,7 +40,9 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const apiBase = await getApiBase();
+
+  const res = await fetch(`${apiBase}${path}`, {
     ...init,
     headers,
     signal,
