@@ -4,6 +4,7 @@
 #  仅支持手动触发 (workflow_dispatch), 用于:
 #    - 注册新设备 → 生成 Recipient Token
 #    - 列出已注册的设备
+#    - 删除(停用)已注册的设备
 #
 #  需要在 GitHub Secrets 中配置(复用已有):
 #    ADMIN_TOKEN — Worker 管理员 Token (与 wrangler secret ADMIN_TOKEN 同值)
@@ -32,6 +33,7 @@ on:
         options:
           - register — 注册新设备
           - list — 列出已注册设备
+          - delete — 删除(停用)设备
         default: "list — 列出已注册设备"
 
       device_name:
@@ -49,6 +51,11 @@ on:
         required: false
         type: string
         default: "general"
+
+      device_id:
+        description: "设备 ID (删除时必填, 完整 UUID 或前缀, 先用 list 查看)"
+        required: false
+        type: string
 
 # 不允许并发运行, 防止注册冲突
 concurrency:
@@ -323,3 +330,153 @@ jobs:
           echo "$RESPONSE" | jq -r '.recipients[] |
             (if .is_active then "🟢" else "🔴" end) as $status |
             "  \($status) \(.name) (ID: \(.id[:8])…)"'
+
+  # ─── 删除(停用)设备 ──────────────────────────────────────
+  delete:
+    name: 🗑️ 删除(停用)设备
+    if: startsWith(github.event.inputs.action, 'delete')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 🏥 健康检查 Worker
+        env:
+          API_BASE: ${{ vars.VITE_API_BASE }}
+        run: |
+          echo "▶ 测试 Worker 是否可达: ${API_BASE}"
+          HEALTH=$(curl -sf "${API_BASE}" 2>&1) || {
+            echo "::error::❌ Worker 不可达, 请检查 VITE_API_BASE 是否正确 (${API_BASE})"
+            exit 1
+          }
+          echo "✅ Worker 响应: $HEALTH"
+
+      - name: 🔍 校验输入参数
+        run: |
+          if [[ -z "${{ inputs.device_id }}" ]]; then
+            echo "::error::❌ 删除设备必须填写「设备 ID」(先用 list 操作查看完整 ID)"
+            exit 1
+          fi
+          echo "✅ 参数校验通过"
+          echo "   设备 ID: ${{ inputs.device_id }}"
+
+      - name: 📡 查询设备信息并确认存在
+        id: lookup
+        env:
+          API_BASE: ${{ vars.VITE_API_BASE }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          # ── 校验环境变量 ──
+          if [[ -z "$API_BASE" ]]; then
+            echo "::error::❌ 未配置 VITE_API_BASE Variable"
+            exit 1
+          fi
+          if [[ -z "$ADMIN_TOKEN" ]]; then
+            echo "::error::❌ 未配置 ADMIN_TOKEN Secret"
+            exit 1
+          fi
+
+          # ── 查询所有设备, 找到匹配的 ──
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" \
+            "${API_BASE}/api/recipients" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}")
+
+          RESPONSE=$(cat "$RESPONSE_FILE")
+          rm -f "$RESPONSE_FILE"
+
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::❌ 查询设备列表失败 (HTTP $HTTP_CODE): $RESPONSE"
+            exit 1
+          fi
+
+          INPUT_ID="${{ inputs.device_id }}"
+
+          # 先尝试精确匹配完整 ID, 再尝试前缀匹配
+          MATCH=$(echo "$RESPONSE" | jq -r --arg id "$INPUT_ID" '
+            .recipients[] | select(.id == $id) | .id' | head -1)
+
+          if [[ -z "$MATCH" ]]; then
+            # 前缀匹配
+            MATCH=$(echo "$RESPONSE" | jq -r --arg prefix "$INPUT_ID" '
+              [.recipients[] | select(.id | startswith($prefix))] |
+              if length == 1 then .[0].id
+              elif length == 0 then "NOT_FOUND"
+              else "AMBIGUOUS"
+              end')
+          fi
+
+          if [[ "$MATCH" == "NOT_FOUND" ]]; then
+            echo "::error::❌ 未找到 ID 以「${INPUT_ID}」开头的设备"
+            echo "提示: 请使用 list 操作查看所有设备及其完整 ID"
+            exit 1
+          fi
+
+          if [[ "$MATCH" == "AMBIGUOUS" ]]; then
+            echo "::error::❌ 前缀「${INPUT_ID}」匹配到多个设备, 请提供更长的 ID 前缀"
+            echo "$RESPONSE" | jq -r --arg prefix "$INPUT_ID" '
+              .recipients[] | select(.id | startswith($prefix)) |
+              "  \(.name) → \(.id)"'
+            exit 1
+          fi
+
+          # 获取设备详情
+          DEVICE_NAME=$(echo "$RESPONSE" | jq -r --arg id "$MATCH" '.recipients[] | select(.id == $id) | .name')
+          DEVICE_ACTIVE=$(echo "$RESPONSE" | jq -r --arg id "$MATCH" '.recipients[] | select(.id == $id) | .is_active')
+
+          if [[ "$DEVICE_ACTIVE" == "false" ]]; then
+            echo "::warning::⚠️ 设备「${DEVICE_NAME}」已处于停用状态"
+          fi
+
+          echo "device_id=$MATCH" >> "$GITHUB_OUTPUT"
+          echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+          echo "✅ 找到设备: ${DEVICE_NAME} (ID: ${MATCH})"
+
+      - name: 🗑️ 删除(停用)设备
+        id: delete
+        env:
+          API_BASE: ${{ vars.VITE_API_BASE }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          DEVICE_ID="${{ steps.lookup.outputs.device_id }}"
+          DEVICE_NAME="${{ steps.lookup.outputs.device_name }}"
+
+          echo "▶ 请求: DELETE ${API_BASE}/api/recipients/${DEVICE_ID}"
+
+          RESPONSE_FILE=$(mktemp)
+          HTTP_CODE=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" \
+            -X DELETE "${API_BASE}/api/recipients/${DEVICE_ID}" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}")
+
+          RESPONSE=$(cat "$RESPONSE_FILE")
+          rm -f "$RESPONSE_FILE"
+
+          echo "▶ HTTP 状态码: $HTTP_CODE"
+          echo "▶ 响应体: $RESPONSE"
+
+          if [[ "$HTTP_CODE" == "200" ]]; then
+            echo "✅ 设备「${DEVICE_NAME}」已成功停用"
+          else
+            echo "::error::❌ 删除失败 (HTTP $HTTP_CODE): $RESPONSE"
+            exit 1
+          fi
+
+      - name: 📋 输出删除摘要
+        if: success()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## 🗑️ 设备已停用
+
+          | 项目 | 值 |
+          |------|-----|
+          | 📱 设备名称 | \`${{ steps.lookup.outputs.device_name }}\` |
+          | 🆔 设备 ID | \`${{ steps.lookup.outputs.device_id }}\` |
+
+          ### ⚠️ 注意事项
+
+          - 停用后, 该设备将**不再接收新消息**
+          - SDK 推送时会自动跳过已停用的设备
+          - 该设备的历史消息仍然保留在数据库中
+          - 如需彻底删除数据, 请直接操作 D1 数据库
+
+          > 🔒 停用操作是**软删除**, 设备记录仍保留在数据库中 (is_active = 0)。
+          EOF
