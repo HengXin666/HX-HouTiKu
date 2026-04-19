@@ -7,10 +7,12 @@ import com.hxhoutiku.app.data.local.entity.MessageEntity
 import com.hxhoutiku.app.data.repository.MessageRepository
 import com.hxhoutiku.app.ui.viewmodel.AuthViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class FeedViewModel @Inject constructor(
     private val repository: MessageRepository,

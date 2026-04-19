@@ -33,6 +33,7 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
         debug {
             isMinifyEnabled = false
@@ -124,6 +125,7 @@ dependencies {
     // Markdown rendering
     implementation(libs.markwon.core)
     implementation(libs.markwon.ext.tables)
+    implementation(libs.markwon.ext.strikethrough)
     implementation(libs.markwon.html)
     implementation(libs.markwon.syntax.highlight)
 }
