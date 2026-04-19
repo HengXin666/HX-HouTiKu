@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { PullToRefresh, Toast } from "antd-mobile";
-import { WifiOff, Inbox, AlertCircle, RefreshCw } from "lucide-react";
+import { Toast } from "antd-mobile";
+import { WifiOff, AlertCircle, RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
 import { MessageList } from "@/components/message/MessageList";
@@ -90,75 +90,60 @@ export function Feed() {
         </div>
         <h3 className="feed-empty-title">未配置 Recipient Token</h3>
         <p className="feed-empty-desc">
-          前往 <strong>设置 → 认证配置</strong> 填写你的 Recipient Token 后即可接收消息。
+          前往 <strong>设置 → 连接</strong> 填写你的 Recipient Token 后即可接收消息。
         </p>
       </div>
     );
   }
 
   return (
-    <PullToRefresh
-      onRefresh={refresh}
-      renderText={(status) => {
-        const textMap: Record<string, string> = {
-          pulling: "下拉刷新",
-          canRelease: "释放刷新",
-          refreshing: "加载中…",
-          complete: "刷新完成",
-        };
-        return (
-          <span className="feed-pull-text">{textMap[status] ?? ""}</span>
-        );
-      }}
-    >
-      <div className="feed-container">
-        {/* Group title */}
-        {groupName && (
-          <h2 className="feed-group-title">{groupName}</h2>
-        )}
+    <div className="feed-container">
+      {/* Group title */}
+      {groupName && (
+        <h2 className="feed-group-title">{groupName}</h2>
+      )}
 
-        {/* Priority filter tabs */}
-        <div className="feed-tabs">
-          {TABS.map(({ key, label, emoji }) => {
-            const count = counts[key] ?? 0;
-            const isActive = activeTab === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={cn(
-                  "feed-tab",
-                  isActive && "feed-tab--active"
-                )}
-              >
-                {emoji && <span className="feed-tab-emoji">{emoji}</span>}
-                <span>{label}</span>
-                {count > 0 && (
-                  <span className="feed-tab-count">{count}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="feed-error">
-            <AlertCircle className="feed-error-icon" />
-            <div className="feed-error-content">
-              <p className="feed-error-title">获取消息失败</p>
-              <p className="feed-error-msg">{error}</p>
-            </div>
-            <button onClick={refresh} className="feed-error-retry">
-              <RefreshCw className="feed-error-retry-icon" />
-              重试
+      {/* Priority filter tabs — X.com style */}
+      <div className="feed-tabs">
+        {TABS.map(({ key, label, emoji }) => {
+          const count = counts[key] ?? 0;
+          const isActive = activeTab === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={cn(
+                "feed-tab",
+                isActive && "feed-tab--active"
+              )}
+            >
+              {emoji && <span className="feed-tab-emoji">{emoji}</span>}
+              <span>{label}</span>
+              {count > 0 && (
+                <span className="feed-tab-count">{count}</span>
+              )}
             </button>
-          </div>
-        )}
-
-        {/* Message list */}
-        <MessageList messages={filtered} loading={loading} />
+          );
+        })}
       </div>
-    </PullToRefresh>
+
+      {/* Error */}
+      {error && (
+        <div className="feed-error">
+          <AlertCircle className="feed-error-icon" />
+          <div className="feed-error-content">
+            <p className="feed-error-title">获取消息失败</p>
+            <p className="feed-error-msg">{error}</p>
+          </div>
+          <button onClick={refresh} className="feed-error-retry">
+            <RefreshCw className="feed-error-retry-icon" />
+            重试
+          </button>
+        </div>
+      )}
+
+      {/* Message list */}
+      <MessageList messages={filtered} loading={loading} />
+    </div>
   );
 }

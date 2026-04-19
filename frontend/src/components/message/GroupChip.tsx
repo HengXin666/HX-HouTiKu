@@ -1,18 +1,12 @@
-import { getGroupEmoji, cn } from "@/lib/utils";
+import { getGroupEmoji } from "@/lib/utils";
 
 interface GroupChipProps {
   group: string;
-  className?: string;
 }
 
-export function GroupChip({ group, className }: GroupChipProps) {
+export function GroupChip({ group }: GroupChipProps) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground",
-        className
-      )}
-    >
+    <span className="group-chip">
       <span>{getGroupEmoji(group)}</span>
       <span>{group}</span>
     </span>

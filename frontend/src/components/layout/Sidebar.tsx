@@ -1,145 +1,119 @@
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
-  Newspaper,
+  Shield,
+  Home,
   FolderOpen,
   Settings,
-  Shield,
-  Lock,
   RefreshCw,
   ChevronRight,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { useMessageStore } from "@/stores/message-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { useCallback } from "react";
-
-interface SidebarProps {
-  className?: string;
-}
+import { useMessageStore } from "@/stores/message-store";
 
 const NAV_ITEMS = [
   {
-    to: "/",
-    icon: Newspaper,
+    path: "/",
     label: "信息流",
-    desc: "所有消息",
-    end: true,
+    icon: Home,
   },
   {
-    to: "/groups",
-    icon: FolderOpen,
+    path: "/groups",
     label: "分组",
-    desc: "按分类查看",
-    end: false,
+    icon: FolderOpen,
   },
   {
-    to: "/settings",
-    icon: Settings,
+    path: "/settings",
     label: "设置",
-    desc: "账户与偏好",
-    end: false,
+    icon: Settings,
   },
 ] as const;
 
-export function Sidebar({ className }: SidebarProps) {
-  const totalUnread = useMessageStore((s) => s.totalUnread);
-  const loading = useMessageStore((s) => s.loading);
-  const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
-  const recipientToken = useAuthStore((s) => s.recipientToken);
-  const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
+export function Sidebar() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const deviceName = useAuthStore((s) => s.deviceName);
+  const totalUnread = useMessageStore((s) => s.totalUnread);
   const lock = useAuthStore((s) => s.lock);
 
-  const handleRefresh = useCallback(() => {
-    if (!recipientToken || !privateKeyHex) return;
-    fetchAndDecrypt(recipientToken, privateKeyHex);
-  }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
-
   return (
-    <aside className={cn("sidebar", className)}>
-      {/* ── Logo area ── */}
-      <div className="sidebar-logo">
+    <nav className="sidebar" aria-label="主导航">
+      {/* Logo */}
+      <Link to="/" className="sidebar-logo" style={{ textDecoration: "none" }}>
         <div className="sidebar-logo-icon">
           <Shield className="sidebar-logo-shield" />
         </div>
         <div className="sidebar-logo-text">
-          <span className="sidebar-logo-name">HX-HouTiKu</span>
+          <span className="sidebar-logo-name">HouTiKu</span>
           <span className="sidebar-logo-tag">E2E Encrypted</span>
         </div>
+      </Link>
+
+      {/* Navigation */}
+      <div className="sidebar-nav">
+        {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+          const isActive =
+            path === "/"
+              ? location.pathname === "/" || location.pathname.startsWith("/message")
+              : location.pathname.startsWith(path);
+
+          return (
+            <Link
+              key={path}
+              to={path}
+              className={cn(
+                "sidebar-nav-item",
+                isActive && "sidebar-nav-item--active"
+              )}
+            >
+              <div className="sidebar-nav-icon-wrap">
+                <Icon className="sidebar-nav-icon" />
+              </div>
+              <div className="sidebar-nav-content">
+                <span className="sidebar-nav-label-text">{label}</span>
+              </div>
+              {path === "/" && totalUnread > 0 && (
+                <span className="sidebar-badge">{totalUnread > 99 ? "99+" : totalUnread}</span>
+              )}
+            </Link>
+          );
+        })}
       </div>
 
-      {/* ── Navigation ── */}
-      <nav className="sidebar-nav">
-        <div className="sidebar-nav-label">导航</div>
-        {NAV_ITEMS.map(({ to, icon: Icon, label, desc, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn("sidebar-nav-item", isActive && "sidebar-nav-item--active")
-            }
-          >
-            <div className="sidebar-nav-icon-wrap">
-              <Icon className="sidebar-nav-icon" />
-            </div>
-            <div className="sidebar-nav-content">
-              <span className="sidebar-nav-label-text">{label}</span>
-              <span className="sidebar-nav-desc">{desc}</span>
-            </div>
-            {to === "/" && totalUnread > 0 ? (
-              <span className="sidebar-badge">
-                {totalUnread > 99 ? "99+" : totalUnread}
-              </span>
-            ) : (
-              <ChevronRight className="sidebar-nav-arrow" />
-            )}
-          </NavLink>
-        ))}
-      </nav>
-
-      {/* ── Spacer ── */}
       <div className="sidebar-spacer" />
 
-      {/* ── Quick actions ── */}
+      {/* Quick actions */}
       <div className="sidebar-actions">
         <button
-          onClick={handleRefresh}
-          disabled={loading}
+          onClick={() => navigate("/")}
           className="sidebar-action-btn"
           title="刷新消息"
         >
-          <RefreshCw
-            className={cn(
-              "sidebar-action-icon",
-              loading && "animate-spin"
-            )}
-          />
-          <span>刷新</span>
+          <RefreshCw className="sidebar-action-icon" />
+          刷新
         </button>
-        <button onClick={lock} className="sidebar-action-btn" title="锁定">
-          <Lock className="sidebar-action-icon" />
-          <span>锁定</span>
+        <button
+          onClick={() => lock()}
+          className="sidebar-action-btn"
+          title="锁定"
+        >
+          🔒 锁定
         </button>
       </div>
 
-      {/* ── Footer: device info ── */}
+      {/* Footer */}
       <div className="sidebar-footer">
         <div className="sidebar-device">
           <div className="sidebar-device-avatar">
             {(deviceName ?? "D")[0].toUpperCase()}
           </div>
           <div className="sidebar-device-info">
-            <span className="sidebar-device-name">
-              {deviceName ?? "default"}
-            </span>
-            <span className="sidebar-device-status">
-              {recipientToken ? "已连接" : "未配置"}
-            </span>
+            <span className="sidebar-device-name">{deviceName ?? "default"}</span>
+            <span className="sidebar-device-status">🟢 已解锁</span>
           </div>
         </div>
-        <p className="sidebar-version">v1.0.0</p>
+        <div className="sidebar-version">v1.0.0</div>
       </div>
-    </aside>
+    </nav>
   );
 }

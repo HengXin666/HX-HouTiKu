@@ -1,78 +1,100 @@
 import { useNavigate } from "react-router-dom";
-import { PriorityBadge } from "./PriorityBadge";
-import { GroupChip } from "./GroupChip";
-import { cn, formatTime } from "@/lib/utils";
-import type { Message } from "@/stores/message-store";
+import { cn, relativeTime, getGroupEmoji, PRIORITY_CONFIG, type PriorityLevel } from "@/lib/utils";
 
 interface MessageCardProps {
-  message: Message;
+  id: string;
+  title: string;
+  body: string;
+  priority: string;
+  group: string;
+  timestamp: number;
+  is_read: boolean;
+  tags: string[];
 }
 
-export function MessageCard({ message }: MessageCardProps) {
+export function MessageCard({
+  id,
+  title,
+  body,
+  priority,
+  group,
+  timestamp,
+  is_read,
+  tags,
+}: MessageCardProps) {
   const navigate = useNavigate();
-
-  const priorityBorderClass = !message.is_read
-    ? ({
-        urgent: "msg-card--urgent",
-        high: "msg-card--high",
-        default: "msg-card--default",
-        low: "msg-card--low",
-        debug: "msg-card--debug",
-      }[message.priority] ?? "")
-    : "";
+  const config = PRIORITY_CONFIG[priority as PriorityLevel] ?? PRIORITY_CONFIG.default;
+  const emoji = getGroupEmoji(group);
+  const preview = body ? stripMarkdown(body).slice(0, 120) : "";
+  const showUrgentLabel = priority === "urgent" || priority === "high";
 
   return (
     <button
-      onClick={() => navigate(`/message/${message.id}`)}
-      className={cn(
-        "msg-card",
-        priorityBorderClass,
-        message.is_read && "msg-card--read"
-      )}
+      onClick={() => navigate(`/message/${id}`)}
+      className={cn("msg-card", is_read && "msg-card--read")}
     >
-      {/* Top row: meta */}
-      <div className="msg-card-meta">
-        <PriorityBadge priority={message.priority} />
-        <GroupChip group={message.group} />
-        <span className="msg-card-time">
-          {formatTime(message.timestamp)}
-        </span>
+      {/* Left: priority indicator circle */}
+      <div className={cn("msg-card-indicator", `msg-card-indicator--${priority}`)}>
+        {emoji}
       </div>
 
-      {/* Title */}
-      <h3
-        className={cn(
-          "msg-card-title",
-          !message.is_read && "msg-card-title--unread"
-        )}
-      >
-        {message.title}
-      </h3>
-
-      {/* Preview */}
-      {message.body && (
-        <p className="msg-card-preview">
-          {message.body.length > 160
-            ? message.body.slice(0, 160) + "…"
-            : message.body}
-        </p>
-      )}
-
-      {/* Tags */}
-      {message.tags.length > 0 && (
-        <div className="msg-card-tags">
-          {message.tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="msg-card-tag">
-              #{tag}
-            </span>
-          ))}
-          {message.tags.length > 3 && (
-            <span className="msg-card-tag msg-card-tag--more">
-              +{message.tags.length - 3}
-            </span>
+      {/* Right: content */}
+      <div className="msg-card-content">
+        {/* Meta row: group name · priority · time */}
+        <div className="msg-card-meta">
+          <span className="msg-card-group">{group}</span>
+          {showUrgentLabel && (
+            <>
+              <span className="msg-card-dot" />
+              <span className={cn("msg-card-priority-label", `msg-card-priority-label--${priority}`)}>
+                {config.label}
+              </span>
+            </>
           )}
+          <span className="msg-card-time">{relativeTime(timestamp)}</span>
         </div>
-      )}
+
+        {/* Title */}
+        <div className={cn("msg-card-title", !is_read && "msg-card-title--unread")}>
+          {title}
+        </div>
+
+        {/* Body preview */}
+        {preview && (
+          <div className="msg-card-preview">{preview}</div>
+        )}
+
+        {/* Tags */}
+        {tags.length > 0 && (
+          <div className="msg-card-tags">
+            {tags.slice(0, 3).map((tag) => (
+              <span key={tag} className="msg-card-tag">{tag}</span>
+            ))}
+            {tags.length > 3 && (
+              <span className="msg-card-tag" style={{ opacity: 0.5 }}>+{tags.length - 3}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Unread dot */}
+      {!is_read && <div className="msg-card-unread-dot" />}
     </button>
   );
+}
+
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, "[code]")
+    .replace(/`[^`]+`/g, "[code]")
+    .replace(/#{1,6}\s/g, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "[image]")
+    .replace(/>\s/g, "")
+    .replace(/[-*+]\s/g, "")
+    .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

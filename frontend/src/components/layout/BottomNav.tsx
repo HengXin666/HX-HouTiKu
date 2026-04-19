@@ -1,52 +1,45 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Newspaper, FolderOpen, Settings } from "lucide-react";
-import { useMessageStore } from "@/stores/message-store";
+import { Home, FolderOpen, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMessageStore } from "@/stores/message-store";
 
-interface BottomNavProps {
-  className?: string;
-}
-
-const tabs = [
-  { key: "/", label: "信息流", icon: Newspaper },
-  { key: "/groups", label: "分组", icon: FolderOpen },
-  { key: "/settings", label: "设置", icon: Settings },
+const TABS = [
+  { path: "/", label: "信息流", icon: Home },
+  { path: "/groups", label: "分组", icon: FolderOpen },
+  { path: "/settings", label: "设置", icon: Settings },
 ] as const;
 
-export function BottomNav({ className }: BottomNavProps) {
-  const totalUnread = useMessageStore((s) => s.totalUnread);
+export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
-
-  const activeKey =
-    tabs.find((t) => {
-      if (t.key === "/") return location.pathname === "/";
-      return location.pathname.startsWith(t.key);
-    })?.key ?? "/";
+  const totalUnread = useMessageStore((s) => s.totalUnread);
 
   return (
-    <nav className={cn("bottom-nav", className)}>
-      {tabs.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = activeKey === tab.key;
+    <nav className="bottom-nav" aria-label="底部导航">
+      {TABS.map(({ path, label, icon: Icon }) => {
+        const isActive =
+          path === "/"
+            ? location.pathname === "/" ||
+              location.pathname.startsWith("/message") ||
+              (location.pathname.startsWith("/groups/") && location.pathname !== "/groups")
+            : location.pathname === path;
+
         return (
           <button
-            key={tab.key}
-            onClick={() => navigate(tab.key)}
-            className={cn(
-              "bottom-nav-item",
-              isActive && "bottom-nav-item--active"
-            )}
+            key={path}
+            onClick={() => navigate(path)}
+            className={cn("bottom-nav-item", isActive && "bottom-nav-item--active")}
+            aria-label={label}
           >
             <div className="bottom-nav-icon-wrap">
               <Icon className="bottom-nav-icon" />
-              {tab.key === "/" && totalUnread > 0 && (
+              {path === "/" && totalUnread > 0 && (
                 <span className="bottom-nav-badge">
-                  {totalUnread > 9 ? "9+" : totalUnread}
+                  {totalUnread > 99 ? "99+" : totalUnread}
                 </span>
               )}
             </div>
-            <span className="bottom-nav-label">{tab.label}</span>
+            <span className="bottom-nav-label">{label}</span>
           </button>
         );
       })}

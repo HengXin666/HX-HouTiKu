@@ -2,13 +2,13 @@ import { Inbox } from "lucide-react";
 
 export function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="rounded-2xl bg-muted p-4 mb-4">
-        <Inbox className="h-8 w-8 text-muted-foreground" />
+    <div className="feed-empty-state">
+      <div className="feed-empty-icon-ring">
+        <Inbox className="feed-empty-icon" />
       </div>
-      <h3 className="text-sm font-medium text-foreground mb-1">暂无消息</h3>
-      <p className="text-xs text-muted-foreground max-w-[240px]">
-        配置推送 SDK 后，消息会出现在这里
+      <h3 className="feed-empty-title">暂无消息</h3>
+      <p className="feed-empty-desc">
+        配置好推送 SDK 后，你的消息将会出现在这里
       </p>
     </div>
   );

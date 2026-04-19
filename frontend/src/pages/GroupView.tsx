@@ -44,11 +44,6 @@ export function GroupView() {
 
   return (
     <div className="group-view">
-      <div className="group-view-header">
-        <span className="group-view-label">分组</span>
-        <span className="group-view-count">{groups.length}</span>
-      </div>
-
       <div className="group-grid">
         {groups.map(([name, stats]) => (
           <button
@@ -68,7 +63,7 @@ export function GroupView() {
                 )}
               </div>
               <p className="group-card-meta">
-                {stats.total} 条消息 · {relativeTime(stats.latestTimestamp)}
+                {stats.total} 条消息 · 最后更新 {relativeTime(stats.latestTimestamp)}
               </p>
             </div>
 
