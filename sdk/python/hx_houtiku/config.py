@@ -20,7 +20,11 @@ class Config:
 
     @classmethod
     def from_env(cls) -> Config:
-        """Load config from environment variables."""
+        """Load config from environment variables.
+
+        HX_HOUTIKU_RECIPIENTS is optional — if omitted, the client
+        will automatically fetch recipients from the Worker API.
+        """
         endpoint = os.environ.get("HX_HOUTIKU_ENDPOINT")
         if not endpoint:
             raise ValueError("HX_HOUTIKU_ENDPOINT environment variable is required")

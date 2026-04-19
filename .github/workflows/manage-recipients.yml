@@ -64,6 +64,17 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: 🏥 健康检查 Worker
+        env:
+          API_BASE: ${{ vars.VITE_API_BASE }}
+        run: |
+          echo "▶ 测试 Worker 是否可达: ${API_BASE}"
+          HEALTH=$(curl -sf "${API_BASE}" 2>&1) || {
+            echo "::error::❌ Worker 不可达, 请检查 VITE_API_BASE 是否正确 (${API_BASE})"
+            exit 1
+          }
+          echo "✅ Worker 响应: $HEALTH"
+
       - name: 🔍 校验输入参数
         run: |
           if [[ -z "${{ inputs.device_name }}" ]]; then
@@ -124,15 +135,24 @@ jobs:
           fi
 
           # ── 发送请求 ──
+          echo "▶ 请求: POST ${API_BASE}/api/recipients"
+          echo "▶ 请求体: $BODY"
+
           RESPONSE_FILE=$(mktemp)
+          HEADER_FILE=$(mktemp)
           HTTP_CODE=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" \
+            -D "$HEADER_FILE" \
             -X POST "${API_BASE}/api/recipients" \
             -H "Authorization: Bearer ${ADMIN_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$BODY")
 
           RESPONSE=$(cat "$RESPONSE_FILE")
-          rm -f "$RESPONSE_FILE"
+          echo "▶ HTTP 状态码: $HTTP_CODE"
+          echo "▶ 响应头:"
+          cat "$HEADER_FILE"
+          echo "▶ 响应体: $RESPONSE"
+          rm -f "$RESPONSE_FILE" "$HEADER_FILE"
 
           # ── 处理结果 ──
           if [[ "$HTTP_CODE" == "201" ]]; then
@@ -219,6 +239,17 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: 🏥 健康检查 Worker
+        env:
+          API_BASE: ${{ vars.VITE_API_BASE }}
+        run: |
+          echo "▶ 测试 Worker 是否可达: ${API_BASE}"
+          HEALTH=$(curl -sf "${API_BASE}" 2>&1) || {
+            echo "::error::❌ Worker 不可达, 请检查 VITE_API_BASE 是否正确 (${API_BASE})"
+            exit 1
+          }
+          echo "✅ Worker 响应: $HEALTH"
+
       - name: 📡 查询已注册设备
         id: query
         env:

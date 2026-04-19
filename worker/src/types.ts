@@ -23,6 +23,7 @@ export interface MessageRow {
   recipient_id: string;
   encrypted_data: string;
   priority: Priority;
+  content_type: ContentType;
   group_name: string;
   timestamp: number;
   is_read: number;
@@ -53,6 +54,7 @@ export interface ApiTokenRow {
 // --- API Request/Response Types ---
 
 export type Priority = "urgent" | "high" | "default" | "low" | "debug";
+export type ContentType = "text" | "markdown" | "html" | "json";
 
 export interface PushRequest {
   id?: string;
@@ -60,6 +62,7 @@ export interface PushRequest {
   encrypted_payloads: Record<string, string>;
   priority?: Priority;
   group?: string;
+  content_type?: ContentType;
   timestamp?: number;
 }
 

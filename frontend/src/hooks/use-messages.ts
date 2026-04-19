@@ -1,10 +1,12 @@
 /**
  * Hook for fetching and decrypting messages with auto-refresh.
+ * Works on both Web (window focus) and Native (Capacitor appStateChange).
  */
 
 import { useEffect, useCallback, useRef } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
+import { isNativePlatform } from "@/lib/platform";
 
 const POLL_INTERVAL = 60_000; // 1 minute
 
@@ -34,11 +36,28 @@ export function useMessages() {
     return () => clearInterval(intervalRef.current);
   }, [refresh]);
 
-  // Refresh on window focus
+  // Refresh on window/app focus
   useEffect(() => {
+    // Web: listen for window focus
     const handleFocus = () => refresh();
     window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
+
+    // Native (Capacitor): listen for app coming to foreground
+    let removeNativeListener: (() => void) | undefined;
+    if (isNativePlatform) {
+      import("@capacitor/app").then(({ App }) => {
+        App.addListener("appStateChange", ({ isActive }) => {
+          if (isActive) refresh();
+        }).then((handle) => {
+          removeNativeListener = () => handle.remove();
+        });
+      });
+    }
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      removeNativeListener?.();
+    };
   }, [refresh]);
 
   return { messages, loading, refresh };

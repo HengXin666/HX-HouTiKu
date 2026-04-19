@@ -40,6 +40,7 @@ app.get("/", authRecipientToken(), async (c) => {
     id: row.id,
     encrypted_data: row.encrypted_data,
     priority: row.priority,
+    content_type: row.content_type ?? "markdown",
     group: row.group_name,
     timestamp: row.timestamp,
     is_read: row.is_read === 1,

@@ -14,6 +14,13 @@ class Priority(str, Enum):
     DEBUG = "debug"
 
 
+class ContentType(str, Enum):
+    TEXT = "text"
+    MARKDOWN = "markdown"
+    HTML = "html"
+    JSON = "json"
+
+
 @dataclass
 class Recipient:
     name: str
@@ -25,6 +32,7 @@ class Message:
     title: str
     body: str = ""
     priority: Priority = Priority.DEFAULT
+    content_type: ContentType = ContentType.MARKDOWN
     group: str = "general"
     tags: list[str] = field(default_factory=list)
 

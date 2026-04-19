@@ -156,8 +156,13 @@ ENCRYPTION_CURVE = "secp256k1"  # 加密曲线, 不要修改
 ### 3.4 初始化数据库
 
 ```bash
-npx wrangler d1 execute hx-houtiku --file=schema.sql
+# --remote 表示在线上 D1 执行; 不加 --remote 则只在本地 dev 数据库执行
+npx wrangler d1 execute hx-houtiku --remote --file=schema.sql
 ```
+
+> 💡 **`--remote` vs 本地**: Wrangler 默认操作的是本地 SQLite 副本(用于 `wrangler dev` 本地开发)。
+> 部署到生产环境时, **必须加 `--remote`** 才会写入 Cloudflare 线上的 D1 数据库。
+> 如果你只是在本地开发调试, 去掉 `--remote` 即可。
 
 这会在 D1 中创建 4 张表: 
 
@@ -373,26 +378,24 @@ curl -X POST https://hx-houtiku-api.你的子域名.workers.dev/api/recipients \
 # Linux/macOS — 加到 ~/.bashrc 或 ~/.zshrc
 export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.你的子域名.workers.dev"
 export HX_HOUTIKU_TOKEN="你设置的ADMIN_TOKEN"
-export HX_HOUTIKU_RECIPIENTS='[{"name":"alice","public_key":"04a1b2c3...你的完整公钥"}]'
+# HX_HOUTIKU_RECIPIENTS 不需要配置! SDK 会自动从 Worker API 拉取已注册设备
 
 # Windows PowerShell — 加到 $PROFILE
 $env:HX_HOUTIKU_ENDPOINT = "https://hx-houtiku-api.你的子域名.workers.dev"
 $env:HX_HOUTIKU_TOKEN = "你设置的ADMIN_TOKEN"
-$env:HX_HOUTIKU_RECIPIENTS = '[{"name":"alice","public_key":"04a1b2c3...你的完整公钥"}]'
 ```
 
-### 配置文件方式(推荐长期使用)
+> 💡 SDK 会自动调用 `GET /api/recipients` 获取已注册设备的公钥列表。
+> 新增/删除设备后, SDK 自动同步, 不需要改任何配置。
+
+### 配置文件方式(可选)
 
 创建 `~/.hx-houtiku.yaml`: 
 
 ```yaml
 endpoint: https://hx-houtiku-api.你的子域名.workers.dev
 api_token: sk-hx-houtiku-你的令牌
-recipients:
-  - name: alice
-    public_key: "04a1b2c3d4e5f6...你的完整公钥"
-  - name: bob                      # 可选: 多个接收者
-    public_key: "04d4e5f6a7b8c9..."
+# recipients 可选, 不写则自动从 Worker API 拉取
 defaults:
   priority: default
   group: general
@@ -588,10 +591,13 @@ npx wrangler pages deploy dist --project-name hx-houtiku
 ```bash
 # 注意: D1 目前不支持自动迁移
 # 如果只是加新表/索引, 直接执行新的 SQL
-npx wrangler d1 execute hx-houtiku --command="CREATE TABLE IF NOT EXISTS ..."
+npx wrangler d1 execute hx-houtiku --remote --command="CREATE TABLE IF NOT EXISTS ..."
 
 # 如果涉及修改已有表, 可能需要备份+重建
-npx wrangler d1 export hx-houtiku --output=backup.sql
+npx wrangler d1 export hx-houtiku --remote --output=backup.sql
+
+# 示例: 从旧版本升级, 给 messages 表加 content_type 列
+npx wrangler d1 execute hx-houtiku --remote --command="ALTER TABLE messages ADD COLUMN content_type TEXT NOT NULL DEFAULT 'markdown'"
 ```
 
 ### 查看日志
@@ -630,17 +636,17 @@ npx wrangler tail
 ### Q: 如何查看 D1 数据库内容
 
 ```bash
-# 在线查看
-npx wrangler d1 execute hx-houtiku --command="SELECT * FROM recipients"
-npx wrangler d1 execute hx-houtiku --command="SELECT id, priority, group_name, timestamp FROM messages ORDER BY timestamp DESC LIMIT 10"
+# 在线查看(加 --remote 查线上数据; 不加查本地 dev 数据)
+npx wrangler d1 execute hx-houtiku --remote --command="SELECT * FROM recipients"
+npx wrangler d1 execute hx-houtiku --remote --command="SELECT id, priority, group_name, timestamp FROM messages ORDER BY timestamp DESC LIMIT 10"
 ```
 
 ### Q: 如何重置所有数据
 
 ```bash
 # ⚠️ 危险操作: 会删除所有数据
-npx wrangler d1 execute hx-houtiku --command="DELETE FROM messages"
-npx wrangler d1 execute hx-houtiku --command="DELETE FROM push_subscriptions"
-npx wrangler d1 execute hx-houtiku --command="DELETE FROM api_tokens"
-npx wrangler d1 execute hx-houtiku --command="DELETE FROM recipients"
+npx wrangler d1 execute hx-houtiku --remote --command="DELETE FROM messages"
+npx wrangler d1 execute hx-houtiku --remote --command="DELETE FROM push_subscriptions"
+npx wrangler d1 execute hx-houtiku --remote --command="DELETE FROM api_tokens"
+npx wrangler d1 execute hx-houtiku --remote --command="DELETE FROM recipients"
 ```

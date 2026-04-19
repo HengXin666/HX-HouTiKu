@@ -14,6 +14,7 @@ app.post("/", authPushToken(), async (c) => {
   const messageId = body.id ?? crypto.randomUUID();
   const priority = body.priority ?? "default";
   const group = body.group ?? "general";
+  const contentType = body.content_type ?? "markdown";
   const timestamp = body.timestamp ?? Date.now();
   const now = Date.now();
 
@@ -48,9 +49,9 @@ app.post("/", authPushToken(), async (c) => {
 
     statements.push(
       c.env.DB.prepare(
-        `INSERT INTO messages (id, recipient_id, encrypted_data, priority, group_name, timestamp, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).bind(msgId, recipient.id, payload, priority, group, timestamp, now)
+        `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, timestamp, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(msgId, recipient.id, payload, priority, contentType, group, timestamp, now)
     );
 
     pushedTo.push(name);

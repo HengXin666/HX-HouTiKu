@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useMessageStore } from "@/stores/message-store";
 import { LockScreen } from "@/pages/LockScreen";
 import { SetupWizard } from "@/pages/SetupWizard";
 import { Feed } from "@/pages/Feed";
@@ -9,16 +10,31 @@ import { GroupView } from "@/pages/GroupView";
 import { MessageDetail } from "@/pages/MessageDetail";
 import { Settings } from "@/pages/Settings";
 import { AppShell } from "@/components/layout/AppShell";
+import { setNativePushHandler } from "@/lib/push";
+import { isNativePlatform } from "@/lib/platform";
 
 export function App() {
   const status = useAuthStore((s) => s.status);
   const initAuth = useAuthStore((s) => s.initialize);
   const initSettings = useSettingsStore((s) => s.initialize);
+  const recipientToken = useAuthStore((s) => s.recipientToken);
+  const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
+  const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
 
   useEffect(() => {
     initAuth();
     initSettings();
   }, [initAuth, initSettings]);
+
+  // On native: register a handler that refreshes messages when a push arrives
+  useEffect(() => {
+    if (!isNativePlatform) return;
+    setNativePushHandler(() => {
+      if (recipientToken && privateKeyHex) {
+        fetchAndDecrypt(recipientToken, privateKeyHex);
+      }
+    });
+  }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
 
   if (status === "loading") {
     return <SplashScreen />;

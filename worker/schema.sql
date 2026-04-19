@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS messages (
     recipient_id TEXT NOT NULL,
     encrypted_data TEXT NOT NULL,
     priority TEXT NOT NULL DEFAULT 'default',
+    content_type TEXT NOT NULL DEFAULT 'markdown',
     group_name TEXT NOT NULL DEFAULT 'general',
     timestamp INTEGER NOT NULL,
     is_read INTEGER DEFAULT 0,
@@ -56,4 +57,11 @@ CREATE TABLE IF NOT EXISTS api_tokens (
     is_active INTEGER DEFAULT 1,
     created_at INTEGER NOT NULL,
     last_used_at INTEGER DEFAULT 0
+);
+
+-- 5. Rate Limiting (sliding window counters)
+CREATE TABLE IF NOT EXISTS rate_limit_hits (
+    bucket TEXT PRIMARY KEY,
+    hit_count INTEGER NOT NULL DEFAULT 0,
+    window_start INTEGER NOT NULL
 );

@@ -148,8 +148,24 @@ export async function getPref<T>(key: string): Promise<T | undefined> {
 // --- Full Reset ---
 
 export async function resetAll(): Promise<void> {
-  const db = await getDB();
-  await db.clear("keystore");
-  await db.clear("messages");
-  await db.clear("preferences");
+  try {
+    const db = await getDB();
+    await db.clear("keystore");
+    await db.clear("messages");
+    await db.clear("preferences");
+    // Close the connection so Android WebView releases the DB lock
+    db.close();
+  } catch {
+    // If DB was already broken, delete it directly
+  }
+  // Reset the cached promise so next getDB() opens a fresh connection
+  dbPromise = null;
+}
+
+/**
+ * Invalidate the in-memory DB handle.
+ * Call after resetAll() or when the DB may be in a stale state.
+ */
+export function invalidateDB(): void {
+  dbPromise = null;
 }

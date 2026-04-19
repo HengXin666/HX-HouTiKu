@@ -22,7 +22,9 @@ import {
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { resetAll, clearMessages } from "@/lib/db";
+import { invalidateApiBaseCache } from "@/lib/api";
 import { copyToClipboard } from "@/lib/utils";
+import { isNativePlatform, hasWebNotification } from "@/lib/platform";
 
 export function Settings() {
   const publicKeyHex = useAuthStore((s) => s.publicKeyHex);
@@ -96,7 +98,10 @@ export function Settings() {
     const r2 = await Dialog.confirm({ content: "最后确认：此操作不可撤销。" });
     if (!r2) return;
     await resetAll();
-    resetAuth();
+    invalidateApiBaseCache();
+    await resetAuth();
+    // Force full reload to clear all in-memory caches (Zustand, API cache, etc.)
+    window.location.replace("/");
   };
 
   return (
@@ -342,11 +347,13 @@ export function Settings() {
               <div className="settings-item-label">Web Push</div>
             </div>
             <span className="settings-item-value" style={{ fontFamily: "inherit" }}>
-              {"Notification" in window
-                ? Notification.permission === "granted"
-                  ? "✅ 已开启"
-                  : "未开启"
-                : "不支持"}
+              {isNativePlatform
+                ? "📱 原生推送"
+                : hasWebNotification
+                  ? Notification.permission === "granted"
+                    ? "✅ 已开启"
+                    : "未开启"
+                  : "不支持"}
             </span>
           </div>
         </div>

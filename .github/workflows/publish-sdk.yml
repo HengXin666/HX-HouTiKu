@@ -1,0 +1,96 @@
+# ============================================================
+#  HX-HouTiKu — 发布 Python SDK 到 PyPI
+#
+#  触发条件:
+#    - 推送 sdk-v* 格式的 tag (如 sdk-v1.0.0)
+#    - 手动触发 (workflow_dispatch)
+#
+#  使用 Trusted Publisher (OIDC), 无需手动管理 API Token
+#  首次发布前需要在 PyPI 上配置 Trusted Publisher, 见 README
+# ============================================================
+
+name: 📦 发布 Python SDK
+
+on:
+  push:
+    tags:
+      - "sdk-v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 🔨 构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 安装 Python + uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: 📦 构建 sdist + wheel
+        working-directory: sdk/python
+        run: uv build
+
+      - name: 📤 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: sdk/python/dist/
+
+  # ─── 发布到 PyPI ──────────────────────────────────────────
+  publish:
+    name: 🚀 发布到 PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # 关键: 使用 Trusted Publisher 需要这个 environment
+    environment:
+      name: pypi
+      url: https://pypi.org/p/hx-houtiku
+
+    # OIDC 所需权限
+    permissions:
+      id-token: write
+
+    steps:
+      - name: 📥 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: 🚀 发布到 PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # 使用 Trusted Publisher, 不需要配置任何 token/secret
+
+  # ─── 可选: 同时发布到 TestPyPI (手动触发时) ─────────────────
+  publish-test:
+    name: 🧪 发布到 TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'workflow_dispatch'
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/hx-houtiku
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: 📥 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: 🧪 发布到 TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

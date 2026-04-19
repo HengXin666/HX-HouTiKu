@@ -172,8 +172,8 @@ ENCRYPTION_CURVE = "secp256k1"
 ```
 
 ```bash
-# 4. 初始化数据库表
-npx wrangler d1 execute hx-houtiku --file=schema.sql
+# 4. 初始化数据库表(⚠️ --remote 表示在线上 D1 执行, 不加则只在本地)
+npx wrangler d1 execute hx-houtiku --remote --file=schema.sql
 
 # 5. 生成 Web Push 用的 VAPID 密钥对
 npx web-push generate-vapid-keys
@@ -315,7 +315,7 @@ uv add hx-houtiku
 ```python
 from hx_houtiku import push
 
-# 一行搞定
+# 一行搞定(会自动从 Worker 拉取已注册的接收者列表)
 push(
     "Hello World",
     "这是你的第一条加密推送消息! 🎉",
@@ -330,13 +330,15 @@ push(
 # Linux/macOS
 export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.你的子域名.workers.dev"
 export HX_HOUTIKU_TOKEN="你设置的ADMIN_TOKEN"
-export HX_HOUTIKU_RECIPIENTS='[{"name":"你的用户名","public_key":"04a1b2c3...你的公钥"}]'
+# HX_HOUTIKU_RECIPIENTS 是可选的! 不配置则自动从 Worker API 拉取已注册设备
 
 # Windows PowerShell
 $env:HX_HOUTIKU_ENDPOINT = "https://hx-houtiku-api.你的子域名.workers.dev"
 $env:HX_HOUTIKU_TOKEN = "你设置的ADMIN_TOKEN"
-$env:HX_HOUTIKU_RECIPIENTS = '[{"name":"你的用户名","public_key":"04a1b2c3...你的公钥"}]'
 ```
+
+> 💡 **不再需要手动配置 recipients!** SDK 会自动从 Worker 获取已注册设备的公钥。
+> 新增设备、删除设备, 都由 Worker 端管理, SDK 自动同步。
 
 ### 方式二: Shell 脚本
 
@@ -378,33 +380,33 @@ curl -X POST https://hx-houtiku-api.你的子域名.workers.dev/api/push \
 ```python
 from hx_houtiku import HxHoutikuClient
 
-# 方式一: 环境变量(最简单)
+# 方式一: 环境变量(最简单, 只需 ENDPOINT + TOKEN)
 client = HxHoutikuClient.from_env()
 
 # 方式二: 配置文件
 client = HxHoutikuClient.from_config("~/.hx-houtiku.yaml")
 
-# 方式三: 手动指定
+# 方式三: 手动指定(recipients 可选, 不传则自动从 Worker API 拉取)
 client = HxHoutikuClient(
     endpoint="https://hx-houtiku-api.xxx.workers.dev",
     api_token="sk-xxx",
-    recipients=[
-        {"name": "alice", "public_key": "04a1b2c3..."},
-        {"name": "bob", "public_key": "04d4e5f6..."},
-    ],
 )
 
 # 发送消息
 result = client.send(
     "数据库告警",
-    "CPU 使用率 95.2%, 内存 78.1%",
-    priority="urgent",       # urgent | high | default | low | debug
-    group="alerts",          # 自定义分组名
-    recipients=["alice"],    # 指定接收人(None = 全部)
+    "CPU 使用率 **95.2%**, 内存 78.1%",
+    priority="urgent",           # urgent | high | default | low | debug
+    content_type="markdown",     # text | markdown | html | json
+    group="alerts",              # 自定义分组名
+    recipients=["alice"],        # 指定接收人(None = 全部)
     tags=["production", "database"],
 )
 print(result)
 # {"status": "ok", "id": "...", "pushed_to": ["alice"], "web_push_sent": ["alice"]}
+
+# 手动刷新接收者列表(新增设备后)
+client.fetch_recipients()
 
 # 用完关闭
 client.close()
@@ -420,14 +422,35 @@ with HxHoutikuClient.from_env() as client:
 # ~/.hx-houtiku.yaml
 endpoint: https://hx-houtiku-api.xxx.workers.dev
 api_token: sk-xxx
-recipients:
-  - name: alice
-    public_key: "04a1b2c3d4e5f6..."
-  - name: bob
-    public_key: "04d4e5f6a7b8c9..."
+# recipients 是可选的! 不写则自动从 Worker API 拉取
+# 如果你希望固定列表, 可以写上:
+# recipients:
+#   - name: alice
+#     public_key: "04a1b2c3d4e5f6..."
 defaults:
   priority: default
   group: general
+```
+
+### 内容类型
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| `text` | 纯文本, 不解析格式 | 日志输出、简单通知 |
+| `markdown` | Markdown 格式(**默认**) | 大多数通知、告警 |
+| `html` | HTML 格式 | 富文本邮件内容 |
+| `json` | JSON 数据, 前端自行渲染 | 结构化数据、表格 |
+
+```python
+# 发送 Markdown
+push("部署完成", "- ✅ 前端\n- ✅ 后端\n- ❌ SDK", content_type="markdown")
+
+# 发送纯文本日志
+push("Cron 输出", raw_log_output, content_type="text", priority="low")
+
+# 发送 JSON 数据
+import json
+push("监控数据", json.dumps(metrics), content_type="json", group="metrics")
 ```
 
 ### CLI 命令行
@@ -435,6 +458,9 @@ defaults:
 ```bash
 # 基本用法
 hx-houtiku "部署完成" -b "v2.1.0 已部署到生产环境" -p high -g ci-cd
+
+# 指定内容类型
+hx-houtiku "日志" -b "$(cat /var/log/cron.log)" -t text -p low
 
 # 指定配置文件
 hx-houtiku "告警" -b "CPU 过高" -p urgent -g alerts -c ~/.hx-houtiku.yaml
@@ -576,6 +602,7 @@ cd sdk/python && uv sync && uv run pytest
 | 📱 构建 App | `.github/workflows/build-android.yml` | 推送 `v*` 标签 / 手动触发 | 构建签名 APK → 上传到 GitHub Release |
 | 🔍 CI 检查 | `.github/workflows/ci.yml` | 所有 push / PR | 后端+前端+SDK 代码质量检查 |
 | 🔑 管理接收者 | `.github/workflows/manage-recipients.yml` | **仅手动触发** | 注册新设备 / 列出已注册设备 |
+| 📦 发布 SDK | `.github/workflows/publish-sdk.yml` | 推送 `sdk-v*` 标签 / 手动触发 | 构建 Python SDK → 发布到 PyPI |
 
 ### 配置步骤(5 分钟)
 
@@ -661,7 +688,7 @@ base64 -i hx-houtiku.keystore -o keystore-base64.txt
 
 然后把 `keystore-base64.txt` 的内容复制到 GitHub Secret `ANDROID_KEYSTORE_BASE64` 中。
 
-> ⚠️ **密钥库文件 (`hx-houtiku.keystore`) 不要提交到 Git! ** 丢失 = 无法更新已安装的 App。
+> ⚠️ **密钥库文件 (`hx-houtiku.keystore`) 不要提交到 Git!** 丢失 = 无法更新已安装的 App。
 
 ### 发版流程
 
@@ -683,6 +710,99 @@ cd worker && npx wrangler deploy
 
 # 更新前端
 cd frontend && pnpm build && npx wrangler pages deploy dist --project-name hx-houtiku
+```
+
+## 发布 Python SDK 到 PyPI
+
+项目内置了 GitHub Actions 自动发布流水线, 推送 tag 即可发包。
+
+### 首次发布配置(一次性)
+
+PyPI 推荐使用 **Trusted Publisher**(基于 OIDC), 不需要手动管理 API Token, 更安全。
+
+#### 1. 注册 PyPI 账号
+
+1. 打开 https://pypi.org/account/register/
+2. 注册并验证邮箱
+3. **强烈建议**启用两步验证(2FA)
+
+#### 2. 在 PyPI 配置 Trusted Publisher
+
+> 💡 如果是全新的包(从未发布过), 使用 "Pending Publisher" 预注册。
+
+1. 登录 https://pypi.org/
+2. 进入 **Account Settings → Publishing → Add a new pending publisher**
+3. 填写: 
+
+   | 字段 | 值 |
+   |------|-----|
+   | PyPI Project Name | `hx-houtiku` |
+   | Owner | 你的 GitHub 用户名或组织名 |
+   | Repository name | `HX-HouTiKu` |
+   | Workflow name | `publish-sdk.yml` |
+   | Environment name | `pypi` |
+
+4. 点击 **Add**
+
+#### 3. 在 GitHub 创建 Environment
+
+1. 打开仓库 → **Settings → Environments**
+2. 点击 **New environment**, 名称填 `pypi`
+3. 可选: 勾选 **Required reviewers** 添加审批人(发布前需要人工确认)
+4. 点击 **Save protection rules**
+
+> 如果你还想支持 TestPyPI 测试发布, 重复上述步骤: 
+> - 在 https://test.pypi.org/ 配置同名 Trusted Publisher
+> - GitHub 上再创建一个 `testpypi` Environment
+
+#### 4. 发版! 
+
+```bash
+# 修改版本号
+# 编辑 sdk/python/pyproject.toml 中的 version = "1.0.0"
+
+# 提交并打 tag
+git add sdk/python/pyproject.toml
+git commit -m "release: sdk v1.0.0"
+git tag sdk-v1.0.0
+git push && git push origin sdk-v1.0.0
+```
+
+GitHub Actions 会自动: `uv build` → 上传到 PyPI。
+
+发布成功后, 用户就可以: 
+
+```bash
+pip install hx-houtiku
+# 或
+uv add hx-houtiku
+```
+
+#### 手动测试发布(TestPyPI)
+
+在 GitHub Actions 页面手动触发 `📦 发布 Python SDK` 流水线, 会同时发布到 TestPyPI: 
+
+```bash
+# 从 TestPyPI 安装测试
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ hx-houtiku
+```
+
+#### 本地手动发布(备用方案)
+
+如果不想用 GitHub Actions, 也可以用 uv 本地发布: 
+
+```bash
+cd sdk/python
+
+# 构建
+uv build
+
+# 发布到 PyPI (需要 API Token)
+# 在 https://pypi.org/manage/account/token/ 创建 Token
+uv publish --token pypi-xxxxxxxxxxxx
+
+# 或发布到 TestPyPI
+uv publish --publish-url https://test.pypi.org/legacy/ --token pypi-xxxxxxxxxxxx
 ```
 
 ## 协议

@@ -15,8 +15,7 @@ uv add hx-houtiku
 ```python
 from hx_houtiku import push
 
-# Configure via environment variables
-# HX_HOUTIKU_ENDPOINT, HX_HOUTIKU_TOKEN, HX_HOUTIKU_RECIPIENTS
+# Only needs ENDPOINT + TOKEN — recipients are auto-fetched from Worker API
 push("Task Done", "Crawled 1200 items in 3m22s", priority="low", group="crawler")
 ```
 
@@ -24,16 +23,19 @@ push("Task Done", "Crawled 1200 items in 3m22s", priority="low", group="crawler"
 
 ```bash
 hx-houtiku "Deploy Complete" -b "v2.1.0 deployed" -p high -g ci-cd
+
+# Specify content type (text / markdown / html / json)
+hx-houtiku "Log Output" -b "$(cat /tmp/output.log)" -t text -p low
 ```
 
 ## Configuration
 
-### Environment Variables
+### Environment Variables (minimal)
 
 ```bash
 export HX_HOUTIKU_ENDPOINT="https://your-worker.workers.dev"
 export HX_HOUTIKU_TOKEN="your-api-token"
-export HX_HOUTIKU_RECIPIENTS='[{"name":"alice","public_key":"04a1b2..."}]'
+# HX_HOUTIKU_RECIPIENTS is optional — auto-fetched from Worker API if omitted
 ```
 
 ### Config File
@@ -42,9 +44,7 @@ export HX_HOUTIKU_RECIPIENTS='[{"name":"alice","public_key":"04a1b2..."}]'
 # ~/.hx-houtiku.yaml
 endpoint: https://your-worker.workers.dev
 api_token: your-api-token
-recipients:
-  - name: alice
-    public_key: "04a1b2c3d4e5f6..."
+# recipients: optional, auto-fetched if omitted
 defaults:
   priority: default
   group: general
@@ -52,6 +52,40 @@ defaults:
 
 ```python
 from hx_houtiku import HxHoutikuClient
+
 client = HxHoutikuClient.from_config("~/.hx-houtiku.yaml")
 client.send("Hello", "World", priority="high")
+```
+
+## Content Type
+
+Specify how the message body should be rendered:
+
+| Type | Description |
+|------|-------------|
+| `text` | Plain text, no formatting |
+| `markdown` | Markdown (default) |
+| `html` | HTML content |
+| `json` | Raw JSON data |
+
+```python
+push("Alert", "CPU **95%**", content_type="markdown")
+push("Log", raw_output, content_type="text")
+```
+
+## Auto-fetch Recipients
+
+The SDK automatically fetches registered recipients from the Worker API.
+No need to manually maintain public key lists:
+
+```python
+client = HxHoutikuClient(
+    endpoint="https://your-worker.workers.dev",
+    api_token="your-token",
+    # No recipients needed! Auto-fetched on first send.
+)
+client.send("Hello", "World")
+
+# Manually refresh after adding new devices:
+client.fetch_recipients()
 ```

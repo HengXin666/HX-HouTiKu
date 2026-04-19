@@ -20,6 +20,13 @@ def main() -> None:
         default="default",
         help="Message priority (default: default)",
     )
+    parser.add_argument(
+        "--content-type",
+        "-t",
+        choices=["text", "markdown", "html", "json"],
+        default="markdown",
+        help="Body content type (default: markdown)",
+    )
     parser.add_argument("--group", "-g", default="general", help="Message group (default: general)")
     parser.add_argument(
         "--recipients",
@@ -40,6 +47,7 @@ def main() -> None:
                 args.title,
                 args.body,
                 priority=args.priority,
+                content_type=args.content_type,
                 group=args.group,
                 recipients=args.recipients,
             )
@@ -51,6 +59,7 @@ def main() -> None:
                 args.title,
                 args.body,
                 priority=args.priority,
+                content_type=args.content_type,
                 group=args.group,
                 recipients=args.recipients,
             )

@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import type { Env } from "./types";
 import { handleScheduled } from "./cron";
+import { rateLimiter } from "./rate-limit";
 
 import pushRoutes from "./routes/push";
 import messageRoutes from "./routes/messages";
@@ -20,6 +21,7 @@ app.use("*", cors({
   maxAge: 86400,
 }));
 app.use("*", logger());
+app.use("/api/*", rateLimiter());
 
 // --- Health check ---
 app.get("/", (c) => c.json({
