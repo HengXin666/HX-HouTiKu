@@ -26,23 +26,23 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Decode google-services.json
-        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+      - name: Decode or create google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > android/app/google-services.json
-          echo "✅ google-services.json 已写入"
-
-      - name: Create placeholder google-services.json
-        if: ${{ secrets.GOOGLE_SERVICES_JSON == '' }}
-        run: |
-          cat > android/app/google-services.json << 'EOF'
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
+            echo "✅ google-services.json 已写入"
+          else
+            cat > android/app/google-services.json << 'PLACEHOLDER'
           {
             "project_info": {"project_number": "000000000000", "project_id": "placeholder", "storage_bucket": "placeholder.appspot.com"},
             "client": [{"client_info": {"mobilesdk_app_id": "1:000000000000:android:0000000000000000","android_client_info": {"package_name": "com.hxhoutiku.app"}},"api_key": [{"current_key": "placeholder"}]}],
             "configuration_version": "1"
           }
-          EOF
-          echo "⚠️ 使用占位 google-services.json（FCM 推送将不可用）"
+          PLACEHOLDER
+            echo "⚠️ 使用占位 google-services.json（FCM 推送将不可用）"
+          fi
 
       - name: Configure API_BASE
         run: |
