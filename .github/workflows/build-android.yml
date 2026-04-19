@@ -58,23 +58,11 @@ jobs:
           fi
           chmod +x gradlew
 
-      - name: Build Debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug
-
       - name: Build Release APK
-        if: startsWith(github.ref, 'refs/tags/')
         working-directory: android
         run: ./gradlew assembleRelease
 
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: hx-houtiku-debug
-          path: android/app/build/outputs/apk/debug/*.apk
-
       - name: Upload Release APK
-        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
           name: hx-houtiku-release
