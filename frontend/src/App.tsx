@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import { useMessageStore } from "@/stores/message-store";
 import { LockScreen } from "@/pages/LockScreen";
 import { SetupWizard } from "@/pages/SetupWizard";
 import { Feed } from "@/pages/Feed";
@@ -10,8 +9,8 @@ import { GroupView } from "@/pages/GroupView";
 import { MessageDetail } from "@/pages/MessageDetail";
 import { Settings } from "@/pages/Settings";
 import { AppShell } from "@/components/layout/AppShell";
-import { setNativePushHandler, registerPushSubscription } from "@/lib/push";
-import { isNativePlatform, hasWebPush } from "@/lib/platform";
+import { registerPushSubscription } from "@/lib/push";
+import { hasWebPush } from "@/lib/platform";
 
 export function App() {
   const status = useAuthStore((s) => s.status);
@@ -19,23 +18,11 @@ export function App() {
   const initSettings = useSettingsStore((s) => s.initialize);
   const pushEnabled = useSettingsStore((s) => s.pushEnabled);
   const recipientToken = useAuthStore((s) => s.recipientToken);
-  const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
-  const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
 
   useEffect(() => {
     initAuth();
     initSettings();
   }, [initAuth, initSettings]);
-
-  // On native: register a handler that refreshes messages when a push arrives
-  useEffect(() => {
-    if (!isNativePlatform) return;
-    setNativePushHandler(() => {
-      if (recipientToken && privateKeyHex) {
-        fetchAndDecrypt(recipientToken, privateKeyHex);
-      }
-    });
-  }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
 
   // Auto-register Web Push when unlocked + pushEnabled + permission already granted
   useEffect(() => {
@@ -45,7 +32,7 @@ export function App() {
       !pushEnabled
     ) return;
 
-    if (isNativePlatform || (hasWebPush && Notification.permission === "granted")) {
+    if (hasWebPush && Notification.permission === "granted") {
       registerPushSubscription(recipientToken).catch(console.error);
     }
   }, [status, recipientToken, pushEnabled]);

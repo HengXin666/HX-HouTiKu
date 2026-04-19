@@ -6,11 +6,6 @@ on:
       - main
     tags:
       - "v*"
-    paths:
-      - "android/**"
-  pull_request:
-    paths:
-      - "android/**"
   workflow_dispatch:
 
 env:
