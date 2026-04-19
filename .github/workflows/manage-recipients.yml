@@ -424,7 +424,7 @@ jobs:
           DEVICE_ACTIVE=$(echo "$RESPONSE" | jq -r --arg id "$MATCH" '.recipients[] | select(.id == $id) | .is_active')
 
           if [[ "$DEVICE_ACTIVE" == "false" ]]; then
-            echo "::warning::⚠️ 设备「${DEVICE_NAME}」已处于停用状态"
+            echo "::warning::⚠️ 设备「${DEVICE_NAME}」当前已停用, 将继续执行彻底删除"
           fi
 
           echo "device_id=$MATCH" >> "$GITHUB_OUTPUT"

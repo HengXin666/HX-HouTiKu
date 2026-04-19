@@ -55,17 +55,29 @@ app.get("/", authPushToken(), async (c) => {
   });
 });
 
-// DELETE /api/recipients/:id — deactivate a recipient
+// DELETE /api/recipients/:id — permanently delete a recipient and all related data
 app.delete("/:id", authPushToken(), async (c) => {
   const id = c.req.param("id");
 
-  await c.env.DB.prepare(
-    "UPDATE recipients SET is_active = 0, updated_at = ? WHERE id = ?"
+  // Check if recipient exists
+  const row = await c.env.DB.prepare(
+    "SELECT id, name FROM recipients WHERE id = ?"
   )
-    .bind(Date.now(), id)
-    .run();
+    .bind(id)
+    .first<{ id: string; name: string }>();
 
-  return c.json({ status: "deactivated" });
+  if (!row) {
+    return c.json({ error: "Recipient not found" }, 404);
+  }
+
+  // Cascade delete: push_subscriptions → messages → recipient
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM push_subscriptions WHERE recipient_id = ?").bind(id),
+    c.env.DB.prepare("DELETE FROM messages WHERE recipient_id = ?").bind(id),
+    c.env.DB.prepare("DELETE FROM recipients WHERE id = ?").bind(id),
+  ]);
+
+  return c.json({ status: "deleted", name: row.name });
 });
 
 export default app;
