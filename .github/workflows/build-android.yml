@@ -48,6 +48,16 @@ jobs:
         run: |
           echo "API_BASE=${{ vars.VITE_API_BASE || 'https://configure-me.workers.dev' }}" >> android/gradle.properties
 
+      - name: Generate Gradle Wrapper
+        working-directory: android
+        run: |
+          # 如果缺少 gradle-wrapper.jar，用 setup-gradle 提供的 gradle 重新生成
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            gradle wrapper --gradle-version 8.9
+            echo "✅ Gradle Wrapper 已重新生成"
+          fi
+          chmod +x gradlew
+
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug
