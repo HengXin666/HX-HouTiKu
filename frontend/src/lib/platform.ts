@@ -1,28 +1,24 @@
 /**
- * Platform detection utilities for Capacitor / Web dual-target.
+ * Platform detection utilities.
+ * Since the app is now web-only (native Android is a separate Kotlin app),
+ * Capacitor is no longer used. These helpers remain for compatibility.
  */
 
-import { Capacitor } from "@capacitor/core";
+/** Always false — native is now a separate Kotlin app, not Capacitor. */
+export const isNativePlatform = false;
 
-/** True when running inside a native Capacitor shell (Android / iOS). */
-export const isNativePlatform = Capacitor.isNativePlatform();
-
-/** Current platform: "android" | "ios" | "web". */
-export const currentPlatform = Capacitor.getPlatform();
+/** Always "web". */
+export const currentPlatform = "web";
 
 /** True when Web Push (Service Worker + PushManager) is available. */
 export const hasWebPush =
-  !isNativePlatform &&
-  "serviceWorker" in navigator &&
-  "PushManager" in window;
+  "serviceWorker" in navigator && "PushManager" in window;
 
 /** True when the Notification API is available (Web only). */
-export const hasWebNotification =
-  !isNativePlatform && "Notification" in window;
+export const hasWebNotification = "Notification" in window;
 
 /**
  * Trigger device vibration.
- * On native: uses navigator.vibrate (supported in Android WebView).
  * Falls back to no-op if unavailable.
  */
 export function vibrate(pattern: number | number[]): void {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Dialog } from "antd-mobile";
+import { Dialog } from "@/components/ui/Dialog";
 import { Shield, Eye, EyeOff, Loader2, RotateCcw } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 

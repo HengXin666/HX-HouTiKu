@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
-import { Switch, Dialog, Toast } from "antd-mobile";
+import { Switch } from "@/components/ui/Switch";
+import { Dialog } from "@/components/ui/Dialog";
+import { Toast } from "@/components/ui/Toast";
 import {
   User,
   Bell,

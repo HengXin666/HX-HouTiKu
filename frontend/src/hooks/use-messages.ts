@@ -13,7 +13,6 @@
 import { useEffect, useCallback, useRef } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore, type PushedEncryptedMessage } from "@/stores/message-store";
-import { isNativePlatform } from "@/lib/platform";
 
 /** Only refresh from server if away for more than 5 minutes */
 const STALE_THRESHOLD = 5 * 60_000;
@@ -73,7 +72,7 @@ export function useMessages() {
     };
   }, [privateKeyHex, ingestPushed, serverRefresh]);
 
-  // Track when the tab goes hidden
+  // Track when the tab goes hidden — refresh on return after long absence
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
@@ -91,30 +90,6 @@ export function useMessages() {
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [serverRefresh]);
-
-  // Native (Capacitor): refresh when coming back to foreground after long absence
-  useEffect(() => {
-    let removeListener: (() => void) | undefined;
-
-    if (isNativePlatform) {
-      let lastPaused = 0;
-      import("@capacitor/app").then(({ App }) => {
-        App.addListener("appStateChange", ({ isActive }) => {
-          if (!isActive) {
-            lastPaused = Date.now();
-          } else if (Date.now() - lastPaused > STALE_THRESHOLD) {
-            serverRefresh();
-          }
-        }).then((handle) => {
-          removeListener = () => handle.remove();
-        });
-      });
-    }
-
-    return () => {
-      removeListener?.();
-    };
   }, [serverRefresh]);
 
   return { messages, loading, refresh: serverRefresh };

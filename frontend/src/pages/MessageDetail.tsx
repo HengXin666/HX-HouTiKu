@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Toast } from "antd-mobile";
+import { Toast } from "@/components/ui/Toast";
 import { Check, Copy, Clock, ArrowLeft } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";

@@ -2137,6 +2137,132 @@ body {
   color: var(--color-foreground);
 }
 
+/* ═══════════════════ UI Components (Toast / Dialog / Switch) ═══════════════════ */
+
+/* Toast */
+.ui-toast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--color-foreground);
+  color: var(--color-background);
+  padding: 0.625rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  max-width: 80vw;
+  text-align: center;
+}
+.ui-toast--bottom { bottom: 4rem; }
+.ui-toast--top { top: 4rem; }
+.ui-toast--center { top: 50%; transform: translateX(-50%) translateY(-50%); }
+.ui-toast--visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+.ui-toast--center.ui-toast--visible { transform: translateX(-50%) translateY(-50%); }
+
+/* Dialog */
+.ui-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+  animation: ui-fade-in 0.15s ease;
+}
+.ui-dialog {
+  background: var(--color-card);
+  border-radius: 14px;
+  max-width: 320px;
+  width: 100%;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.ui-dialog-content {
+  padding: 1.5rem 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--color-foreground);
+  white-space: pre-line;
+}
+.ui-dialog-actions {
+  display: flex;
+  border-top: 1px solid var(--color-border);
+}
+.ui-dialog-btn {
+  flex: 1;
+  padding: 0.875rem 0.5rem;
+  border: none;
+  background: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--color-primary);
+  transition: background 0.12s;
+}
+.ui-dialog-btn:not(:last-child) {
+  border-right: 1px solid var(--color-border);
+}
+.ui-dialog-btn:hover {
+  background: var(--color-muted);
+}
+.ui-dialog-btn--bold { font-weight: 600; }
+.ui-dialog-btn--danger { color: var(--color-destructive, #ef4444); }
+
+@keyframes ui-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Switch */
+.ui-switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  border: none;
+  background: var(--color-muted);
+  cursor: pointer;
+  padding: 2px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.ui-switch--checked {
+  background: var(--color-primary);
+}
+.ui-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ui-switch-handle {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+.ui-switch--checked .ui-switch-handle {
+  transform: translateX(18px);
+}
+.ui-switch-spinner {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-muted-foreground);
+  border-top-color: transparent;
+  border-radius: 50%;
+  margin: 4px auto;
+  animation: ui-spin 0.6s linear infinite;
+}
+@keyframes ui-spin {
+  to { transform: rotate(360deg); }
+}
+
 .settings-field-edit-btn svg {
   width: 14px;
   height: 14px;
