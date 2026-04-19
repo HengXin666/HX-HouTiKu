@@ -1,5 +1,23 @@
 import { useNavigate } from "react-router-dom";
-import { cn, relativeTime, getGroupEmoji, PRIORITY_CONFIG, type PriorityLevel } from "@/lib/utils";
+import {
+  Flame,
+  AlertTriangle,
+  Circle,
+  ArrowDown,
+  Bug,
+  FolderOpen,
+} from "lucide-react";
+import { cn, relativeTime, PRIORITY_CONFIG, type PriorityLevel } from "@/lib/utils";
+
+import type { LucideIcon } from "lucide-react";
+
+const PRIORITY_ICONS: Record<string, LucideIcon> = {
+  urgent: Flame,
+  high: AlertTriangle,
+  default: Circle,
+  low: ArrowDown,
+  debug: Bug,
+};
 
 interface MessageCardProps {
   id: string;
@@ -24,8 +42,8 @@ export function MessageCard({
 }: MessageCardProps) {
   const navigate = useNavigate();
   const config = PRIORITY_CONFIG[priority as PriorityLevel] ?? PRIORITY_CONFIG.default;
-  const emoji = getGroupEmoji(group);
-  const preview = body ? stripMarkdown(body).slice(0, 120) : "";
+  const PriorityIcon = PRIORITY_ICONS[priority] ?? Circle;
+  const preview = body ? stripMarkdown(body).slice(0, 140) : "";
   const showUrgentLabel = priority === "urgent" || priority === "high";
 
   return (
@@ -33,15 +51,16 @@ export function MessageCard({
       onClick={() => navigate(`/message/${id}`)}
       className={cn("msg-card", is_read && "msg-card--read")}
     >
-      {/* Left: priority indicator circle */}
+      {/* Left: priority indicator circle with SVG icon */}
       <div className={cn("msg-card-indicator", `msg-card-indicator--${priority}`)}>
-        {emoji}
+        <PriorityIcon style={{ width: 20, height: 20 }} />
       </div>
 
       {/* Right: content */}
       <div className="msg-card-content">
         {/* Meta row: group name · priority · time */}
         <div className="msg-card-meta">
+          <FolderOpen style={{ width: 14, height: 14, flexShrink: 0, opacity: 0.6 }} />
           <span className="msg-card-group">{group}</span>
           {showUrgentLabel && (
             <>

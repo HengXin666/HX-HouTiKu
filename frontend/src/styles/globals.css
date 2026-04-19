@@ -7,14 +7,14 @@
  */
 
 @theme {
-  --color-background: #000000;
+  --color-background: rgb(33, 40, 48);
   --color-foreground: #e7e9ea;
-  --color-card: #16181c;
+  --color-card: #1c2430;
   --color-card-foreground: #e7e9ea;
-  --color-muted: #1d1f23;
-  --color-muted-foreground: #71767b;
-  --color-border: #2f3336;
-  --color-input: #1d1f23;
+  --color-muted: #283240;
+  --color-muted-foreground: #8b949e;
+  --color-border: #374350;
+  --color-input: #283240;
   --color-ring: #1d9bf0;
   --color-primary: #1d9bf0;
   --color-primary-foreground: #ffffff;
@@ -56,13 +56,13 @@
   --adm-color-warning: #f7931a;
   --adm-color-danger: #f4212e;
   --adm-color-text: #e7e9ea;
-  --adm-color-text-secondary: #71767b;
-  --adm-color-background: #000000;
-  --adm-color-fill-content: #16181c;
-  --adm-color-border: #2f3336;
-  --adm-border-color: #2f3336;
-  --adm-color-box: #16181c;
-  --adm-color-weak: #71767b;
+  --adm-color-text-secondary: #8b949e;
+  --adm-color-background: rgb(33, 40, 48);
+  --adm-color-fill-content: #1c2430;
+  --adm-color-border: #374350;
+  --adm-border-color: #374350;
+  --adm-color-box: #1c2430;
+  --adm-color-weak: #8b949e;
   --adm-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -126,7 +126,8 @@ body {
   -webkit-tap-highlight-color: transparent;
   background: var(--color-background);
   color: var(--color-foreground);
-  line-height: 1.5;
+  line-height: 1.6;
+  font-size: 16px;
 }
 
 /* ── Scrollbar ── */
@@ -692,7 +693,7 @@ body {
   background: transparent;
   border: none;
   color: var(--color-muted-foreground);
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 500;
   font-family: inherit;
   white-space: nowrap;
@@ -726,12 +727,12 @@ body {
 }
 
 .feed-tab-emoji {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1;
 }
 
 .feed-tab-count {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--color-muted-foreground);
   background: var(--color-muted);
   padding: 0 0.375rem;
@@ -843,17 +844,17 @@ body {
 }
 
 .feed-empty-title {
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 700;
   color: var(--color-foreground);
-  margin-bottom: 0.375rem;
+  margin-bottom: 0.5rem;
 }
 
 .feed-empty-desc {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--color-muted-foreground);
-  max-width: 280px;
-  line-height: 1.5;
+  max-width: 300px;
+  line-height: 1.6;
 }
 
 .feed-empty-desc strong {
@@ -925,21 +926,21 @@ body {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  margin-bottom: 0.125rem;
+  margin-bottom: 0.25rem;
 }
 
 .msg-card-group {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--color-foreground);
 }
 
 .msg-card-priority-label {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   padding: 0 0.375rem;
   border-radius: 4px;
-  line-height: 1.375rem;
+  line-height: 1.5rem;
 }
 
 .msg-card-priority-label--urgent {
@@ -960,7 +961,7 @@ body {
 }
 
 .msg-card-time {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--color-muted-foreground);
   white-space: nowrap;
   flex-shrink: 0;
@@ -969,15 +970,15 @@ body {
 
 /* Title */
 .msg-card-title {
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 400;
   color: var(--color-foreground);
-  line-height: 1.4;
+  line-height: 1.45;
   display: -webkit-box;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 0.125rem;
+  margin-bottom: 0.25rem;
 }
 
 .msg-card-title--unread {
@@ -986,9 +987,9 @@ body {
 
 /* Preview */
 .msg-card-preview {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--color-muted-foreground);
-  line-height: 1.4;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -1051,13 +1052,13 @@ body {
 }
 
 .msg-list-date-text {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--color-foreground);
 }
 
 .msg-list-date-count {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--color-muted-foreground);
 }
 
@@ -1163,7 +1164,7 @@ body {
 }
 
 .group-card-name {
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--color-foreground);
   white-space: nowrap;
@@ -1187,9 +1188,9 @@ body {
 }
 
 .group-card-meta {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--color-muted-foreground);
-  margin-top: 0.125rem;
+  margin-top: 0.25rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1811,8 +1812,9 @@ body {
 /* ── Content Renderers ── */
 
 .msg-prose {
-  line-height: 1.7;
+  line-height: 1.75;
   word-break: break-word;
+  font-size: 1rem;
 }
 .msg-prose h1, .msg-prose h2, .msg-prose h3, .msg-prose h4 {
   color: var(--color-foreground);
@@ -1820,17 +1822,17 @@ body {
   margin-top: 1.25em;
   margin-bottom: 0.5em;
 }
-.msg-prose h1 { font-size: 1.5em; }
-.msg-prose h2 { font-size: 1.25em; }
-.msg-prose h3 { font-size: 1.1em; }
-.msg-prose p { margin-bottom: 0.75em; color: var(--color-foreground); opacity: 0.9; }
+.msg-prose h1 { font-size: 1.625em; }
+.msg-prose h2 { font-size: 1.375em; }
+.msg-prose h3 { font-size: 1.175em; }
+.msg-prose p { margin-bottom: 0.75em; color: var(--color-foreground); opacity: 0.92; }
 .msg-prose a { color: var(--color-primary); text-decoration: none; }
 .msg-prose a:hover { text-decoration: underline; }
 .msg-prose code {
   background: var(--color-muted);
   padding: 0.15em 0.4em;
   border-radius: 4px;
-  font-size: 0.875em;
+  font-size: 0.9em;
   color: var(--color-primary);
 }
 .msg-prose pre {
@@ -1874,8 +1876,9 @@ body {
 }
 
 .msg-html {
-  line-height: 1.7;
+  line-height: 1.75;
   word-break: break-word;
+  font-size: 1rem;
 }
 .msg-html img { max-width: 100%; border-radius: 12px; }
 
@@ -1884,15 +1887,15 @@ body {
   border-radius: 12px;
   padding: 1em;
   overflow-x: auto;
-  font-size: 0.8125em;
+  font-size: 0.9rem;
   font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
 }
 
 .msg-text {
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.7;
-  font-size: 0.9375em;
+  line-height: 1.75;
+  font-size: 1rem;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -2314,22 +2317,22 @@ body {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--color-muted-foreground);
   margin-bottom: 1rem;
 }
 
 .msg-detail-time svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .msg-detail-title {
-  font-size: 1.375rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: var(--color-foreground);
   letter-spacing: -0.02em;
-  line-height: 1.3;
+  line-height: 1.35;
   margin-bottom: 1rem;
 }
 

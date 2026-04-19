@@ -1,64 +1,121 @@
 /**
- * Hook for fetching and decrypting messages with auto-refresh.
- * Works on both Web (window focus) and Native (Capacitor appStateChange).
+ * Hook for message management — push-driven, zero polling.
+ *
+ * Data flow:
+ * 1. Initial load: GET /api/messages (one-time D1 query on mount)
+ * 2. Real-time: Web Push → Service Worker → postMessage → ingestPushed()
+ *    (messages arrive pre-encrypted in the push payload, decrypted locally)
+ * 3. Focus refresh: only when returning after >5min away (safety net)
+ *
+ * No setInterval. No polling. D1 is queried only on initial load.
  */
 
 import { useEffect, useCallback, useRef } from "react";
 import { useAuthStore } from "@/stores/auth-store";
-import { useMessageStore } from "@/stores/message-store";
+import { useMessageStore, type PushedEncryptedMessage } from "@/stores/message-store";
 import { isNativePlatform } from "@/lib/platform";
 
-const POLL_INTERVAL = 60_000; // 1 minute
+/** Only refresh from server if away for more than 5 minutes */
+const STALE_THRESHOLD = 5 * 60_000;
 
 export function useMessages() {
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
   const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
+  const ingestPushed = useMessageStore((s) => s.ingestPushed);
   const loadCached = useMessageStore((s) => s.loadCached);
   const messages = useMessageStore((s) => s.messages);
   const loading = useMessageStore((s) => s.loading);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const lastFetchRef = useRef(0);
+  const hiddenSinceRef = useRef<number | null>(null);
 
-  const refresh = useCallback(() => {
+  /** Full server refresh (queries D1) — used sparingly */
+  const serverRefresh = useCallback(() => {
     if (!recipientToken || !privateKeyHex) return;
+    lastFetchRef.current = Date.now();
     fetchAndDecrypt(recipientToken, privateKeyHex);
   }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
 
-  // Initial load
+  // Initial load: cached first, then one server fetch
   useEffect(() => {
     loadCached();
-    refresh();
-  }, [loadCached, refresh]);
+    serverRefresh();
+  }, [loadCached, serverRefresh]);
 
-  // Polling
+  // Listen for pushed messages from Service Worker
+  // This is the PRIMARY data path for new messages — no polling needed
   useEffect(() => {
-    intervalRef.current = setInterval(refresh, POLL_INTERVAL);
-    return () => clearInterval(intervalRef.current);
-  }, [refresh]);
+    if (!privateKeyHex) return;
 
-  // Refresh on window/app focus
+    const handleSWMessage = (event: MessageEvent) => {
+      const data = event.data;
+
+      if (data?.type === "PUSH_MESSAGE" && data.message) {
+        // New format: full encrypted message in push payload
+        // Decrypt and insert directly — zero D1 queries
+        const pushed: PushedEncryptedMessage = data.message;
+        ingestPushed(privateKeyHex, pushed);
+      } else if (data?.type === "NEW_PUSH_MESSAGE") {
+        // Legacy fallback: push only contained metadata
+        // Must do a server fetch (queries D1)
+        serverRefresh();
+      }
+    };
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", handleSWMessage);
+    }
+
+    return () => {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleSWMessage);
+      }
+    };
+  }, [privateKeyHex, ingestPushed, serverRefresh]);
+
+  // Track when the tab goes hidden
   useEffect(() => {
-    // Web: listen for window focus
-    const handleFocus = () => refresh();
-    window.addEventListener("focus", handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenSinceRef.current = Date.now();
+      } else if (document.visibilityState === "visible") {
+        // Only refresh from server if we were away for >5min
+        // This handles the case where push messages were missed while sleeping
+        const hiddenSince = hiddenSinceRef.current;
+        hiddenSinceRef.current = null;
+        if (hiddenSince && Date.now() - hiddenSince > STALE_THRESHOLD) {
+          serverRefresh();
+        }
+      }
+    };
 
-    // Native (Capacitor): listen for app coming to foreground
-    let removeNativeListener: (() => void) | undefined;
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [serverRefresh]);
+
+  // Native (Capacitor): refresh when coming back to foreground after long absence
+  useEffect(() => {
+    let removeListener: (() => void) | undefined;
+
     if (isNativePlatform) {
+      let lastPaused = 0;
       import("@capacitor/app").then(({ App }) => {
         App.addListener("appStateChange", ({ isActive }) => {
-          if (isActive) refresh();
+          if (!isActive) {
+            lastPaused = Date.now();
+          } else if (Date.now() - lastPaused > STALE_THRESHOLD) {
+            serverRefresh();
+          }
         }).then((handle) => {
-          removeNativeListener = () => handle.remove();
+          removeListener = () => handle.remove();
         });
       });
     }
 
     return () => {
-      window.removeEventListener("focus", handleFocus);
-      removeNativeListener?.();
+      removeListener?.();
     };
-  }, [refresh]);
+  }, [serverRefresh]);
 
-  return { messages, loading, refresh };
+  return { messages, loading, refresh: serverRefresh };
 }

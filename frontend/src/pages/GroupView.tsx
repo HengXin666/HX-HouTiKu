@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, FolderOpen } from "lucide-react";
+import { ChevronRight, FolderOpen, Folder } from "lucide-react";
 import { useMessageStore } from "@/stores/message-store";
-import { getGroupEmoji, relativeTime } from "@/lib/utils";
+import { relativeTime } from "@/lib/utils";
 
 export function GroupView() {
   const messages = useMessageStore((s) => s.messages);
@@ -52,7 +52,7 @@ export function GroupView() {
             className="group-card"
           >
             <div className="group-card-emoji">
-              {getGroupEmoji(name)}
+              <Folder style={{ width: 24, height: 24, color: "var(--color-primary)" }} />
             </div>
 
             <div className="group-card-body">

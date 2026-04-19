@@ -1,15 +1,22 @@
 /**
  * Message store — manages decrypted messages, fetching, and caching.
+ *
+ * Two data paths:
+ * 1. fetchAndDecrypt() — initial load from server (GET /api/messages)
+ * 2. ingestPushed()    — real-time: decrypt a message pushed via Web Push
+ *
+ * After initial load, all new messages arrive via Web Push → ingestPushed().
+ * No polling required.
  */
 
 import { create } from "zustand";
-import { fetchMessages, markAsRead, type EncryptedMessage } from "@/lib/api";
+import { fetchMessages, type EncryptedMessage } from "@/lib/api";
+import { markAsRead } from "@/lib/api";
 import { decryptMessage, type DecryptedMessage } from "@/lib/crypto";
 import {
   cacheMessages,
   getCachedMessages,
   markCachedRead,
-  type CachedMessage,
 } from "@/lib/db";
 
 export interface Message {
@@ -23,6 +30,17 @@ export interface Message {
   tags: string[];
 }
 
+/** Raw pushed message from Service Worker (still encrypted) */
+export interface PushedEncryptedMessage {
+  id: string;
+  encrypted_data: string;
+  priority: string;
+  content_type: string;
+  group: string;
+  timestamp: number;
+  is_read: boolean;
+}
+
 interface MessageState {
   messages: Message[];
   totalUnread: number;
@@ -31,7 +49,7 @@ interface MessageState {
   hasMore: boolean;
 
   // Active filter
-  activeTab: string; // "all" | priority level
+  activeTab: string;
   activeGroup: string | null;
 
   // Actions
@@ -41,6 +59,11 @@ interface MessageState {
     privateKeyHex: string,
     options?: { since?: number; append?: boolean }
   ) => Promise<void>;
+  /** Ingest a single message pushed in real-time — decrypt and insert, no network call */
+  ingestPushed: (
+    privateKeyHex: string,
+    pushed: PushedEncryptedMessage
+  ) => void;
   markRead: (token: string, ids: string[]) => Promise<void>;
   setActiveTab: (tab: string) => void;
   setActiveGroup: (group: string | null) => void;
@@ -90,7 +113,6 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           });
         } catch (err) {
           console.error(`Failed to decrypt message ${enc.id}:`, err);
-          // Keep the message but mark it as unreadable
           decrypted.push({
             id: enc.id,
             title: "🔒 解密失败",
@@ -143,6 +165,51 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         error: err instanceof Error ? err.message : "Failed to fetch messages",
         loading: false,
       });
+    }
+  },
+
+  ingestPushed: (privateKeyHex, pushed) => {
+    const existing = get().messages;
+
+    // Deduplicate — skip if already present
+    if (existing.some((m) => m.id === pushed.id)) return;
+
+    try {
+      const plain = decryptMessage(privateKeyHex, pushed.encrypted_data);
+      const msg: Message = {
+        id: pushed.id,
+        title: plain.title,
+        body: plain.body,
+        priority: pushed.priority,
+        group: pushed.group,
+        timestamp: pushed.timestamp,
+        is_read: false,
+        tags: plain.tags ?? [],
+      };
+
+      // Insert at correct position (sorted by timestamp desc)
+      const updated = [msg, ...existing].sort(
+        (a, b) => b.timestamp - a.timestamp
+      );
+
+      set({
+        messages: updated,
+        totalUnread: get().totalUnread + 1,
+      });
+
+      // Cache in background (fire-and-forget)
+      cacheMessages([{
+        id: msg.id,
+        title: msg.title,
+        body: msg.body,
+        priority: msg.priority,
+        group: msg.group,
+        timestamp: msg.timestamp,
+        is_read: msg.is_read,
+        tags: msg.tags,
+      }]).catch(() => {});
+    } catch (err) {
+      console.error("Failed to decrypt pushed message:", err);
     }
   },
 

@@ -1,67 +1,48 @@
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Toast } from "antd-mobile";
-import { WifiOff, AlertCircle, RefreshCw } from "lucide-react";
+import {
+  WifiOff,
+  AlertCircle,
+  RefreshCw,
+  Layers,
+  Flame,
+  AlertTriangle,
+  Circle,
+  ArrowDown,
+  Bug,
+} from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
+import { useMessages } from "@/hooks/use-messages";
 import { MessageList } from "@/components/message/MessageList";
 import { cn } from "@/lib/utils";
 
-const TABS = [
-  { key: "all", label: "全部", emoji: "" },
-  { key: "urgent", label: "紧急", emoji: "🔴" },
-  { key: "high", label: "重要", emoji: "🟠" },
-  { key: "default", label: "普通", emoji: "🔵" },
-  { key: "low", label: "低优", emoji: "🟢" },
-  { key: "debug", label: "调试", emoji: "⚪" },
-] as const;
+import type { LucideIcon } from "lucide-react";
 
-const MIN_REFRESH_INTERVAL = 5_000;
+const TABS: { key: string; label: string; icon: LucideIcon }[] = [
+  { key: "all", label: "全部", icon: Layers },
+  { key: "urgent", label: "紧急", icon: Flame },
+  { key: "high", label: "重要", icon: AlertTriangle },
+  { key: "default", label: "普通", icon: Circle },
+  { key: "low", label: "低优", icon: ArrowDown },
+  { key: "debug", label: "调试", icon: Bug },
+];
 
 export function Feed() {
   const { groupName } = useParams();
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
 
-  const messages = useMessageStore((s) => s.messages);
-  const loading = useMessageStore((s) => s.loading);
+  // Use the unified hook for fetching + polling + push integration
+  const { messages, loading, refresh } = useMessages();
+
   const error = useMessageStore((s) => s.error);
   const activeTab = useMessageStore((s) => s.activeTab);
   const setActiveTab = useMessageStore((s) => s.setActiveTab);
-  const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
-  const loadCached = useMessageStore((s) => s.loadCached);
 
-  const lastRefreshRef = useRef(0);
-  const [noToken, setNoToken] = useState(false);
+  const noToken = !recipientToken || !privateKeyHex;
 
-  const refresh = useCallback(async () => {
-    if (!recipientToken || !privateKeyHex) {
-      setNoToken(true);
-      return;
-    }
-    setNoToken(false);
-
-    const now = Date.now();
-    if (now - lastRefreshRef.current < MIN_REFRESH_INTERVAL) {
-      Toast.show({ content: "操作太频繁，请稍后再试", position: "bottom" });
-      return;
-    }
-    lastRefreshRef.current = now;
-
-    await fetchAndDecrypt(recipientToken, privateKeyHex);
-  }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
-
-  useEffect(() => {
-    loadCached();
-    if (recipientToken && privateKeyHex) {
-      fetchAndDecrypt(recipientToken, privateKeyHex);
-      lastRefreshRef.current = Date.now();
-    } else {
-      setNoToken(true);
-    }
-  }, [loadCached, recipientToken, privateKeyHex, fetchAndDecrypt]);
-
-  // Filter
+  // Filter messages by group and priority
   const filtered = messages.filter((m) => {
     if (groupName && m.group !== groupName) return false;
     if (activeTab !== "all" && m.priority !== activeTab) return false;
@@ -81,7 +62,7 @@ export function Feed() {
     debug: scopedMsgs.filter((m) => m.priority === "debug").length,
   };
 
-  // No token
+  // No token state
   if (noToken && messages.length === 0) {
     return (
       <div className="feed-empty-state">
@@ -105,7 +86,7 @@ export function Feed() {
 
       {/* Priority filter tabs — X.com style */}
       <div className="feed-tabs">
-        {TABS.map(({ key, label, emoji }) => {
+        {TABS.map(({ key, label, icon: Icon }) => {
           const count = counts[key] ?? 0;
           const isActive = activeTab === key;
           return (
@@ -117,7 +98,7 @@ export function Feed() {
                 isActive && "feed-tab--active"
               )}
             >
-              {emoji && <span className="feed-tab-emoji">{emoji}</span>}
+              <Icon style={{ width: 16, height: 16, flexShrink: 0 }} />
               <span>{label}</span>
               {count > 0 && (
                 <span className="feed-tab-count">{count}</span>

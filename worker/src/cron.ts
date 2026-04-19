@@ -29,9 +29,8 @@ export async function handleScheduled(env: Env): Promise<void> {
       "DELETE FROM messages WHERE expires_at > 0 AND expires_at < ?"
     ).bind(now),
 
-    // Rate limit: remove buckets older than 10 minutes (max window is 60s)
-    env.DB.prepare(
-      "DELETE FROM rate_limit_hits WHERE window_start < ?"
-    ).bind(nowSec - 600),
+    // Note: rate limiting is now in-memory, so rate_limit_hits table is unused.
+    // Clean up any leftover rows from the old D1-based rate limiter.
+    env.DB.prepare("DELETE FROM rate_limit_hits WHERE 1=1"),
   ]);
 }

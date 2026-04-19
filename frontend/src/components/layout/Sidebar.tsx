@@ -5,6 +5,8 @@ import {
   FolderOpen,
   Settings,
   RefreshCw,
+  Lock,
+  Unlock,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -97,7 +99,8 @@ export function Sidebar() {
           className="sidebar-action-btn"
           title="锁定"
         >
-          🔒 锁定
+          <Lock className="sidebar-action-icon" />
+          锁定
         </button>
       </div>
 
@@ -109,7 +112,10 @@ export function Sidebar() {
           </div>
           <div className="sidebar-device-info">
             <span className="sidebar-device-name">{deviceName ?? "default"}</span>
-            <span className="sidebar-device-status">🟢 已解锁</span>
+            <span className="sidebar-device-status">
+              <Unlock style={{ width: 12, height: 12, display: "inline", verticalAlign: "middle", marginRight: 4, color: "var(--color-priority-low)" }} />
+              已解锁
+            </span>
           </div>
         </div>
         <div className="sidebar-version">v1.0.0</div>

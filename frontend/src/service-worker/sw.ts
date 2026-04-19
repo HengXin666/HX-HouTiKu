@@ -8,10 +8,29 @@ precacheAndRoute(self.__WB_MANIFEST);
 
 // ====== Web Push Listener ======
 
+interface PushMessage {
+  id: string;
+  encrypted_data: string;
+  priority: string;
+  content_type: string;
+  group: string;
+  timestamp: number;
+  is_read: boolean;
+}
+
+interface PushPayload {
+  type: string;
+  message?: PushMessage;
+  // Legacy fields for backward compat
+  id?: string;
+  priority?: string;
+  group?: string;
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
-  let data: { type: string; id?: string; priority?: string; group?: string; timestamp?: number };
+  let data: PushPayload;
   try {
     data = event.data.json();
   } catch {
@@ -20,61 +39,73 @@ self.addEventListener("push", (event) => {
 
   if (data.type !== "new_message") return;
 
-  const priority = data.priority ?? "default";
-  const group = data.group ?? "general";
-
-  // Priority → notification config
-  type NotifConfig = NotificationOptions & { vibrate?: number[] };
-  const configs: Record<string, NotifConfig> = {
-    urgent: {
-      icon: "/icons/icon-192x192.png",
-      badge: "/icons/icon-192x192.png",
-      vibrate: [200, 100, 200, 100, 200],
-      requireInteraction: true,
-      tag: `urgent-${group}`,
-    },
-    high: {
-      icon: "/icons/icon-192x192.png",
-      badge: "/icons/icon-192x192.png",
-      vibrate: [200, 100, 200],
-      requireInteraction: false,
-      tag: `high-${group}`,
-    },
-    default: {
-      icon: "/icons/icon-192x192.png",
-      badge: "/icons/icon-192x192.png",
-      vibrate: [100],
-      silent: false,
-      tag: `default-${group}`,
-    },
-  };
-
-  // Skip push notifications for low/debug
-  if (priority === "low" || priority === "debug") return;
-
-  const groupEmoji: Record<string, string> = {
-    alerts: "🔴",
-    work: "📋",
-    "ai-daily": "🤖",
-    crawler: "🕷",
-    "ci-cd": "🔧",
-    general: "📬",
-  };
-
-  const emoji = groupEmoji[group] ?? "📬";
-  const priorityLabel = priority === "urgent" ? "紧急" : "新";
-
-  const title = `${emoji} ${group} · ${priorityLabel}消息`;
-  const body = "点击查看详情";
-
-  const notifConfig = configs[priority] ?? configs.default;
+  // New format: payload contains full encrypted message
+  const msg = data.message;
+  const priority = msg?.priority ?? data.priority ?? "default";
+  const group = msg?.group ?? data.group ?? "general";
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      data: { url: `/?focus=${data.id}` },
-      ...notifConfig,
-    } as NotificationOptions)
+    (async () => {
+      // 1. Forward the encrypted message to all open clients
+      //    They will decrypt and display it — no need to poll GET /api/messages
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of clients) {
+        if (msg) {
+          // Full message push — client can decrypt directly
+          client.postMessage({
+            type: "PUSH_MESSAGE",
+            message: msg,
+          });
+        } else {
+          // Legacy fallback — just signal a refresh (backward compat)
+          client.postMessage({
+            type: "NEW_PUSH_MESSAGE",
+            id: data.id,
+            priority,
+            group,
+          });
+        }
+      }
+
+      // 2. Show notification (skip for low/debug)
+      if (priority === "low" || priority === "debug") return;
+
+      type NotifConfig = NotificationOptions & { vibrate?: number[] };
+      const configs: Record<string, NotifConfig> = {
+        urgent: {
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-192x192.png",
+          vibrate: [200, 100, 200, 100, 200],
+          requireInteraction: true,
+          tag: `urgent-${group}`,
+        },
+        high: {
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-192x192.png",
+          vibrate: [200, 100, 200],
+          requireInteraction: false,
+          tag: `high-${group}`,
+        },
+        default: {
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-192x192.png",
+          vibrate: [100],
+          silent: false,
+          tag: `default-${group}`,
+        },
+      };
+
+      const priorityLabel = priority === "urgent" ? "紧急" : "新";
+      const title = `${group} · ${priorityLabel}消息`;
+      const body = "点击查看详情";
+      const notifConfig = configs[priority] ?? configs.default;
+
+      await self.registration.showNotification(title, {
+        body,
+        data: { url: `/?focus=${msg?.id ?? data.id}` },
+        ...notifConfig,
+      } as NotificationOptions);
+    })()
   );
 });
 

@@ -21,7 +21,6 @@ app.post("/", authPushToken(), async (c) => {
   // Resolve target recipients
   let targetNames = body.recipients;
   if (!targetNames || targetNames.length === 0) {
-    // Push to all active recipients
     const allRecipients = await c.env.DB.prepare(
       "SELECT name FROM recipients WHERE is_active = 1"
     ).all<RecipientRow>();
@@ -56,26 +55,41 @@ app.post("/", authPushToken(), async (c) => {
 
     pushedTo.push(name);
 
-    // Send Web Push notification for urgent/high/default
-    if (priority !== "low" && priority !== "debug") {
-      const subs = await c.env.DB.prepare(
-        "SELECT * FROM push_subscriptions WHERE recipient_id = ?"
-      )
-        .bind(recipient.id)
-        .all<PushSubscriptionRow>();
+    // ── Web Push: carry the encrypted message data in the payload ──
+    // This allows the client to decrypt directly without polling GET /api/messages.
+    // Web Push payload limit is ~4KB; encrypted_data for typical messages is well under that.
+    // For all priorities (including low/debug), we send the data push.
+    const subs = await c.env.DB.prepare(
+      "SELECT * FROM push_subscriptions WHERE recipient_id = ?"
+    )
+      .bind(recipient.id)
+      .all<PushSubscriptionRow>();
 
-      if (subs.results.length > 0) {
-        webPushSent.push(name);
-        // Web Push is fire-and-forget, errors are non-fatal
-        for (const sub of subs.results) {
-          try {
-            await sendWebPush(c.env, sub, { type: "new_message", id: msgId, priority, group, timestamp });
-          } catch {
-            // Subscription may be expired — clean it up
-            await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
-              .bind(sub.id)
-              .run();
-          }
+    if (subs.results.length > 0) {
+      webPushSent.push(name);
+
+      // Build the push payload containing the full encrypted message
+      const pushPayload = JSON.stringify({
+        type: "new_message",
+        message: {
+          id: msgId,
+          encrypted_data: payload,
+          priority,
+          content_type: contentType,
+          group,
+          timestamp,
+          is_read: false,
+        },
+      });
+
+      for (const sub of subs.results) {
+        try {
+          await sendWebPush(c.env, sub, pushPayload);
+        } catch {
+          // Subscription expired — clean it up
+          await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
+            .bind(sub.id)
+            .run();
         }
       }
     }
@@ -91,7 +105,7 @@ app.post("/", authPushToken(), async (c) => {
 async function sendWebPush(
   env: Env,
   sub: PushSubscriptionRow,
-  payload: Record<string, unknown>
+  payload: string
 ): Promise<void> {
   const { generatePushHTTPRequest } = await import("../webpush");
 
@@ -100,7 +114,7 @@ async function sendWebPush(
       publicKey: env.VAPID_PUBLIC_KEY,
       privateKey: env.VAPID_PRIVATE_KEY,
     },
-    payload: JSON.stringify(payload),
+    payload,
     target: {
       endpoint: sub.endpoint,
       keys: {
@@ -110,7 +124,6 @@ async function sendWebPush(
     },
     adminContact: "mailto:admin@hx-houtiku.dev",
     ttl: 60 * 60, // 1 hour
-    urgency: payload.priority === "urgent" ? "high" : "normal",
   });
 
   const resp = await fetch(endpoint, { method: "POST", headers, body });

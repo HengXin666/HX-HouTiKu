@@ -1,17 +1,15 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Toast } from "antd-mobile";
-import { Check, Copy, Clock } from "lucide-react";
+import { Check, Copy, Clock, ArrowLeft } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
 import { PriorityBadge } from "@/components/message/PriorityBadge";
 import { GroupChip } from "@/components/message/GroupChip";
-import { ContentRenderer } from "@/components/message/ContentRenderer";
+import { ContentRenderer, resolveFormat, getFormatInfo, type ContentFormat } from "@/components/message/ContentRenderer";
 import { copyToClipboard, cn } from "@/lib/utils";
 
-type ContentFormat = "auto" | "markdown" | "html" | "json" | "text";
-
-const FORMAT_OPTIONS = [
+const FORMAT_OPTIONS: { label: string; value: ContentFormat }[] = [
   { label: "自动", value: "auto" },
   { label: "Markdown", value: "markdown" },
   { label: "HTML", value: "html" },
@@ -46,6 +44,7 @@ export function MessageDetail() {
           className="msg-detail-action-btn"
           style={{ marginTop: "1rem" }}
         >
+          <ArrowLeft style={{ width: 16, height: 16 }} />
           返回
         </button>
       </div>
@@ -60,6 +59,10 @@ export function MessageDetail() {
     minute: "2-digit",
   });
 
+  // Detect the resolved format so we can show an indicator
+  const detectedFormat = message.body ? resolveFormat(message.body, format) : "text";
+  const { label: formatLabel, Icon: FormatIcon } = getFormatInfo(detectedFormat);
+
   const handleCopy = async () => {
     const ok = await copyToClipboard(`${message.title}\n\n${message.body}`);
     if (ok) {
@@ -73,11 +76,17 @@ export function MessageDetail() {
       <div className="msg-detail-meta">
         <PriorityBadge priority={message.priority} size="md" />
         <GroupChip group={message.group} />
+        {message.body && (
+          <span className="group-chip" title={`检测为 ${formatLabel} 格式`}>
+            <FormatIcon style={{ width: 12, height: 12, flexShrink: 0 }} />
+            <span>{formatLabel}</span>
+          </span>
+        )}
       </div>
 
       {/* Timestamp */}
       <div className="msg-detail-time">
-        <Clock />
+        <Clock style={{ width: 16, height: 16, flexShrink: 0 }} />
         <span>{formattedDate}</span>
       </div>
 
@@ -94,7 +103,7 @@ export function MessageDetail() {
               {FORMAT_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => setFormat(opt.value as ContentFormat)}
+                  onClick={() => setFormat(opt.value)}
                   className={cn(
                     "msg-detail-format-btn",
                     format === opt.value && "msg-detail-format-btn--active"
@@ -129,12 +138,12 @@ export function MessageDetail() {
             onClick={() => markRead(recipientToken, [message.id])}
             className="msg-detail-action-btn msg-detail-action-btn--primary"
           >
-            <Check />
+            <Check style={{ width: 16, height: 16 }} />
             标记已读
           </button>
         )}
         <button onClick={handleCopy} className="msg-detail-action-btn">
-          <Copy />
+          <Copy style={{ width: 16, height: 16 }} />
           复制内容
         </button>
       </div>
