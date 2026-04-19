@@ -51,6 +51,17 @@ jobs:
         run: |
           echo "API_BASE=${{ vars.VITE_API_BASE || 'https://configure-me.workers.dev' }}" >> android/gradle.properties
 
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            echo "✅ release.keystore 已写入"
+          else
+            echo "⚠️ 未配置 ANDROID_KEYSTORE_BASE64，Release APK 将使用 debug 签名"
+          fi
+
       - name: Generate Gradle Wrapper
         working-directory: android
         run: |
@@ -63,6 +74,11 @@ jobs:
 
       - name: Build Release APK
         working-directory: android
+        env:
+          KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 && 'app/release.keystore' || '' }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
       - name: Get version info
