@@ -2212,6 +2212,29 @@ body {
 .ui-dialog-btn--bold { font-weight: 600; }
 .ui-dialog-btn--danger { color: var(--color-destructive, #ef4444); }
 
+/* Test Push Dialog */
+.test-push-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.test-push-dialog-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-foreground);
+}
+.test-push-dialog-desc {
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  margin: 0;
+  line-height: 1.4;
+}
+.test-push-dialog-hint {
+  font-size: 0.6875rem;
+  color: var(--color-muted-foreground);
+  opacity: 0.8;
+}
+
 @keyframes ui-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

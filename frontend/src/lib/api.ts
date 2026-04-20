@@ -141,3 +141,22 @@ export function subscribePush(
     }),
   });
 }
+
+export interface TestPushResponse {
+  status: string;
+  id: string;
+  pushed_to: string[];
+  web_push_sent: string[];
+  encryption_errors?: string[];
+}
+
+export function sendTestPush(
+  adminToken: string,
+  data: { title: string; body: string }
+): Promise<TestPushResponse> {
+  return request("/api/test-push", {
+    method: "POST",
+    token: adminToken,
+    body: JSON.stringify(data),
+  });
+}
