@@ -15,7 +15,7 @@
 - [第四步: 部署前端(Pages PWA)](#第四步部署前端pages-pwa)
 - [第五步: 首次设置](#第五步首次设置)
 - [第六步: 配置推送来源](#第六步配置推送来源)
-- [可选: 绑定自定义域名](#可选绑定自定义域名)
+- [推荐: 绑定自定义域名(解决中国大陆访问问题)](#推荐-绑定自定义域名解决中国大陆访问问题)
 - [可选: GitHub Actions 自动部署（推荐）](#可选github-actions-自动部署推荐)
 - [更新与维护](#更新与维护)
 - [常见问题](#常见问题)
@@ -431,27 +431,134 @@ push('🎉 部署成功', '恭喜! HX-HouTiKu 已经配置完成。', priority='
 
 ---
 
-## 可选: 绑定自定义域名
+## 推荐: 绑定自定义域名(解决中国大陆访问问题)
 
-如果你有自己的域名, 可以绑定更好看的地址: 
+> ⚠️ **如果你的用户在中国大陆, 这一步不是可选, 而是必须的。**
 
-### Worker 自定义域名
+### 为什么 workers.dev 在中国很慢或不通
+
+`*.workers.dev` 和 `*.pages.dev` 是 Cloudflare 提供的默认免费域名。
+这些域名在中国大陆存在严重的连通性问题: 
+
+| 问题 | 说明 |
+|------|------|
+| **DNS 解析被干扰** | `workers.dev` 的 DNS 查询在中国经常返回错误结果或超时 |
+| **IP 段不稳定** | 默认域名走的 Cloudflare IP 段在中国连通性差 |
+| **SNI 检测** | TLS 握手时 `workers.dev` 的 SNI 可能被识别过滤 |
+
+**结果**: 中国用户直连 `*.workers.dev` 时, 可能完全无法访问(超时/DNS失败), 或者延迟极高(3-10秒)。
+
+### 解决原理
+
+绑定自定义域名后, 流量改走 Cloudflare 的 **Anycast CDN IP**(如 `104.16.x.x`)。
+这些 IP 在中国有较好的连通性(虽然不如国内 CDN, 但基本可达, 延迟通常 50-200ms)。
+
+```
+绑定前:  用户 → DNS(workers.dev 被干扰) → ❌ 超时
+绑定后:  用户 → DNS(你的域名正常解析) → Cloudflare Anycast CDN → ✅ Worker
+```
+
+### 前提
+
+- 拥有一个域名(任意注册商购买, `.com` / `.dev` / `.me` 等均可)
+- 域名的 **DNS 托管在 Cloudflare**(免费, 在 Dashboard 中添加站点即可)
+
+### 步骤 1: 将域名 DNS 托管到 Cloudflare
+
+如果你的域名还不在 Cloudflare:
+
+1. 打开 https://dash.cloudflare.com/ → **Add a site**
+2. 输入你的域名, 选择 **Free** 套餐
+3. Cloudflare 会给你两个 NS 记录(如 `ada.ns.cloudflare.com`)
+4. 去你的域名注册商(如阿里云/Namesilo/GoDaddy)修改 NS 记录
+5. 等待 DNS 传播(通常几分钟到几小时)
+
+### 步骤 2: 给 Worker 绑定自定义域名
+
+**方式一: Dashboard 操作(推荐首次使用)**
 
 1. 打开 Cloudflare Dashboard → **Workers & Pages**
 2. 点击你的 Worker(`hx-houtiku-api`)
-3. 进入 **Settings → Triggers → Custom Domains**
-4. 添加域名, 如 `push-api.example.com`
+3. 进入 **Settings → Domains & Routes → Custom Domains**
+4. 点击 **Add Custom Domain**
+5. 输入子域名, 如 `api.yourdomain.com`
+6. Cloudflare 会自动创建 DNS 记录, 点击确认
 
-> 前提: 域名的 DNS 要在 Cloudflare 管理。
+**方式二: wrangler.toml 配置(推荐长期维护)**
 
-### Pages 自定义域名
+编辑 `worker/wrangler.toml`, 添加: 
+
+```toml
+# 自定义域名(取消注释并修改为你的域名)
+routes = [
+  { pattern = "api.yourdomain.com", custom_domain = true }
+]
+
+# 可选: 绑定自定义域名后, 禁用 workers.dev 默认域名
+# 好处: 减少攻击面, 所有流量必须走你的域名
+# workers_dev = false
+```
+
+然后 `npx wrangler deploy`, 自动生效。
+
+### 步骤 3: 给 Pages 绑定自定义域名
 
 1. 打开 Cloudflare Dashboard → **Workers & Pages**
 2. 点击你的 Pages 项目(`hx-houtiku`)
 3. 进入 **Custom domains**
-4. 添加域名, 如 `push.example.com`
+4. 添加域名, 如 `push.yourdomain.com`
 
-绑定后记得更新前端的 `VITE_API_BASE` 环境变量并重新构建。
+### 步骤 4: 更新所有客户端配置
+
+绑定完成后, 需要更新各处引用的 API 地址: 
+
+**前端 (GitHub Variables):**
+```
+VITE_API_BASE=https://api.yourdomain.com
+```
+
+**Android (gradle.properties):**
+```properties
+API_BASE=https://api.yourdomain.com
+```
+
+**SDK 环境变量:**
+```bash
+export HX_HOUTIKU_ENDPOINT="https://api.yourdomain.com"
+```
+
+**CI (GitHub Variables → VITE_API_BASE):**
+```
+https://api.yourdomain.com
+```
+
+> 更新后推一次代码触发 CI 重新构建前端, 或手动 `pnpm build && wrangler pages deploy`。
+
+### 验证
+
+```bash
+# 测试 Worker 自定义域名
+curl https://api.yourdomain.com/
+# 应返回 {"name":"hx-houtiku-api","version":"1.0.0","status":"ok"}
+
+# 测试 Pages 自定义域名
+curl -I https://push.yourdomain.com/
+# 应返回 200 OK
+
+# 对比测试(如果 workers.dev 还没禁用)
+curl --connect-timeout 5 https://hx-houtiku-api.xxx.workers.dev/
+# 中国大陆可能超时
+```
+
+### 推荐域名方案
+
+| 子域名 | 用途 | 绑定到 |
+|--------|------|--------|
+| `api.yourdomain.com` | Worker API 后端 | Workers Custom Domain |
+| `push.yourdomain.com` | 前端 PWA | Pages Custom Domain |
+
+> 💡 绑定自定义域名是完全免费的, 不需要 Cloudflare 付费套餐。
+> 唯一的成本是域名本身的注册费(通常 $1-10/年)。
 
 ---
 
@@ -616,6 +723,21 @@ npx wrangler tail
 ---
 
 ## 常见问题
+
+### Q: 中国大陆访问 workers.dev 很慢/完全不通
+
+这是已知问题。`*.workers.dev` 和 `*.pages.dev` 在中国大陆连通性极差。
+
+**解决方案**: 绑定自定义域名。详见上方 [绑定自定义域名](#推荐-绑定自定义域名解决中国大陆访问问题) 章节。
+
+这是最有效的解决方案, 绑定后中国用户延迟从"超时"降到 50-200ms。
+
+### Q: 绑定了自定义域名还是慢怎么办
+
+1. 确认域名 DNS 确实托管在 Cloudflare(检查 NS 记录)
+2. 确认 Cloudflare Dashboard 中该域名的 DNS 记录显示 **橙色云朵**(Proxied), 不是灰色(DNS Only)
+3. 尝试清除本地 DNS 缓存: `ipconfig /flushdns` (Windows) 或 `sudo dscacheutil -flushcache` (macOS)
+4. 如果延迟仍然较高(200ms+), 这是正常的 — Cloudflare 在中国大陆没有自有节点, 流量会就近走香港/新加坡/日本节点
 
 ### Q: 部署 Worker 时提示 "no account id"
 

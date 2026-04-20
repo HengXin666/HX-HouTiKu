@@ -10,7 +10,7 @@ import { MessageDetail } from "@/pages/MessageDetail";
 import { Settings } from "@/pages/Settings";
 import { AppShell } from "@/components/layout/AppShell";
 import { registerPushSubscription } from "@/lib/push";
-import { hasWebPush } from "@/lib/platform";
+import { hasWebPush, isNativeAndroid } from "@/lib/platform";
 
 export function App() {
   const status = useAuthStore((s) => s.status);
@@ -24,7 +24,7 @@ export function App() {
     initSettings();
   }, [initAuth, initSettings]);
 
-  // Auto-register Web Push when unlocked + pushEnabled + permission already granted
+  // Auto-register push when unlocked + pushEnabled + permission already granted
   useEffect(() => {
     if (
       status !== "unlocked" ||
@@ -32,7 +32,9 @@ export function App() {
       !pushEnabled
     ) return;
 
-    if (hasWebPush && Notification.permission === "granted") {
+    // Native Android: always try to register (native bridge handles permission)
+    // Web: only if Web Push is supported and permission is already granted
+    if (isNativeAndroid || (hasWebPush && Notification.permission === "granted")) {
       registerPushSubscription(recipientToken).catch(console.error);
     }
   }, [status, recipientToken, pushEnabled]);

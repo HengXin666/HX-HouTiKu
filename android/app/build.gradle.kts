@@ -1,9 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.hilt)
-    alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
 }
 
@@ -15,8 +12,8 @@ android {
         applicationId = "com.hxhoutiku.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "2.0.0"
+        versionCode = 2
+        versionName = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -25,8 +22,6 @@ android {
     }
 
     signingConfigs {
-        // Release signing — reads from environment variables (set by CI)
-        // or gradle.properties (local dev). Falls through to debug if absent.
         val keystorePath = System.getenv("KEYSTORE_PATH")
             ?: project.findProperty("KEYSTORE_PATH") as? String
         if (keystorePath != null) {
@@ -69,7 +64,6 @@ android {
     }
 
     buildFeatures {
-        compose = true
         buildConfig = true
     }
 
@@ -88,64 +82,18 @@ android {
 dependencies {
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.activity)
     implementation(libs.androidx.splash.screen)
-
-    // Compose
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons)
-    implementation(libs.androidx.navigation.compose)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-
-    // Hilt DI
-    implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
-    implementation(libs.hilt.navigation.compose)
-
-    // Networking
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.moshi)
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
-    implementation(libs.moshi)
-    ksp(libs.moshi.codegen)
-
-    // Room Database
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-
-    // DataStore + Security
-    implementation(libs.androidx.datastore)
-    implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.webkit)
 
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
 
-    // Crypto (Bouncy Castle for ECIES/secp256k1)
-    implementation(libs.bouncy.castle)
-
-    // Coroutines
+    // Coroutines (for FCM token async)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
-
-    // Image loading
-    implementation(libs.coil.compose)
-
-    // Markdown rendering
-    implementation(libs.markwon.core)
-    implementation(libs.markwon.ext.tables)
-    implementation(libs.markwon.ext.strikethrough)
-    implementation(libs.markwon.html)
-    implementation(libs.markwon.syntax.highlight)
+    implementation(libs.kotlinx.coroutines.play.services)
 }
 
 configurations.all {

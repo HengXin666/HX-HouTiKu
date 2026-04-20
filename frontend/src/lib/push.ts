@@ -1,10 +1,17 @@
 /**
- * Push notification management — Web Push only.
- * Native push is handled by the separate Kotlin Android app (FCM).
+ * Push notification management — Web Push + Native FCM.
+ *
+ * - On Android WebView: uses the native JS Bridge to register FCM push.
+ * - On Web (desktop/mobile browser): uses standard Web Push (VAPID/RFC 8291).
  */
 
-import { hasWebPush } from "./platform";
-import { fetchConfig, subscribePush } from "./api";
+import {
+  hasWebPush,
+  isNativeAndroid,
+  getNativeBridge,
+  requestNativeNotificationPermission,
+} from "./platform";
+import { fetchConfig, getApiBase, subscribePush } from "./api";
 
 // ──────────────────────────── Web Push helpers ────────────────────────────
 
@@ -48,21 +55,67 @@ async function registerWebPush(recipientToken: string): Promise<boolean> {
   }
 }
 
+// ──────────────────────────── Native FCM Push ─────────────────────────────
+
+async function registerNativeFcmPush(
+  recipientToken: string,
+): Promise<boolean> {
+  const bridge = getNativeBridge();
+  if (!bridge) return false;
+
+  try {
+    const apiBase = await getApiBase();
+    if (!apiBase) {
+      console.error("API base URL not configured");
+      return false;
+    }
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        window.__hxNativeFcmRegisterCallback = undefined;
+        resolve(false);
+      }, 15_000);
+
+      window.__hxNativeFcmRegisterCallback = (statusCode: number) => {
+        clearTimeout(timeout);
+        window.__hxNativeFcmRegisterCallback = undefined;
+        resolve(statusCode >= 200 && statusCode < 300);
+      };
+
+      bridge.registerFcmPush(apiBase, recipientToken);
+    });
+  } catch (err) {
+    console.error("Failed to register native FCM push:", err);
+    return false;
+  }
+}
+
 // ──────────────────────────── Public API ───────────────────────────────────
 
 /**
- * Register for push notifications (Web Push).
+ * Register for push notifications.
+ * Automatically selects the right strategy based on platform.
  */
 export async function registerPushSubscription(
   recipientToken: string,
 ): Promise<boolean> {
+  if (isNativeAndroid) {
+    return registerNativeFcmPush(recipientToken);
+  }
   return registerWebPush(recipientToken);
 }
 
 /**
- * Request notification permission (Web Notification API).
+ * Request notification permission.
+ * On Android: triggers the system permission dialog via native bridge.
+ * On Web: uses the Notification API.
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (isNativeAndroid) {
+    const status = await requestNativeNotificationPermission();
+    return status as NotificationPermission;
+  }
+
   if (!("Notification" in window)) return "denied";
   if (Notification.permission === "granted") return "granted";
   return Notification.requestPermission();

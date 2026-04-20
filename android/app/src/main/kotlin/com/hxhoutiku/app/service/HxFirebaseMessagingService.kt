@@ -2,8 +2,8 @@ package com.hxhoutiku.app.service
 
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
-import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -11,29 +11,24 @@ import com.google.firebase.messaging.RemoteMessage
 import com.hxhoutiku.app.HxApp
 import com.hxhoutiku.app.MainActivity
 import com.hxhoutiku.app.R
-import com.hxhoutiku.app.crypto.EciesManager
-import com.hxhoutiku.app.crypto.KeyManager
-import com.hxhoutiku.app.data.remote.HxApi
-import com.hxhoutiku.app.data.remote.dto.SubscribeKeys
-import com.hxhoutiku.app.data.remote.dto.SubscribeRequest
-import com.hxhoutiku.app.data.repository.DecryptedPayload
-import com.hxhoutiku.app.data.repository.MessageRepository
-import com.hxhoutiku.app.ui.screen.feed.SessionHolder
-import com.squareup.moshi.Moshi
-import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import javax.inject.Inject
+import java.net.HttpURLConnection
+import java.net.URL
 
-@AndroidEntryPoint
+/**
+ * FCM push service for WebView hybrid architecture.
+ *
+ * Responsibilities:
+ *  1. Show system notifications when a push arrives (with or without foreground WebView).
+ *  2. When a new FCM token is issued, re-register with the backend if we have credentials cached.
+ *
+ * There is NO decryption here — the WebView (React frontend) handles all crypto.
+ * The notification text shows the `group` from the push data or a default label.
+ */
 class HxFirebaseMessagingService : FirebaseMessagingService() {
-
-    @Inject lateinit var keyManager: KeyManager
-    @Inject lateinit var api: HxApi
-    @Inject lateinit var repository: MessageRepository
-    @Inject lateinit var moshi: Moshi
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var notifId = 1000
@@ -42,87 +37,62 @@ class HxFirebaseMessagingService : FirebaseMessagingService() {
         private const val TAG = "HxFCM"
     }
 
+    // ─── Token refresh ───
+
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "New FCM token: $token")
+        Log.d(TAG, "New FCM token: ${token.take(12)}…")
 
-        // Re-register with backend
-        val recipientToken = keyManager.getRecipientToken() ?: return
+        // Attempt to re-register using cached credentials
+        val prefs = applicationContext.getSharedPreferences("hx_settings", Context.MODE_PRIVATE)
+        val apiBase = prefs.getString("api_base", null)
+        val recipientToken = prefs.getString("recipient_token", null)
+
+        if (apiBase.isNullOrBlank() || recipientToken.isNullOrBlank()) {
+            Log.d(TAG, "No cached credentials — skip re-register")
+            return
+        }
+
         scope.launch {
             try {
-                api.subscribe(
-                    auth = "Bearer $recipientToken",
-                    body = SubscribeRequest(
-                        endpoint = "fcm://$token",
-                        keys = SubscribeKeys(p256dh = "native-fcm", auth = "native-fcm")
-                    )
-                )
-                Log.d(TAG, "FCM token re-registered with backend")
+                val url = URL("${apiBase.trimEnd('/')}/api/subscribe")
+                val body = """{"endpoint":"fcm://$token","keys":{"p256dh":"native-fcm","auth":"native-fcm"}}"""
+
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer $recipientToken")
+                conn.doOutput = true
+                conn.outputStream.use { it.write(body.toByteArray()) }
+
+                val code = conn.responseCode
+                Log.d(TAG, "FCM token re-registered: HTTP $code")
+                conn.disconnect()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to re-register FCM token", e)
             }
         }
     }
 
+    // ─── Message received ───
+
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         Log.d(TAG, "Push received: ${message.data}")
 
         val data = message.data
-        val encryptedData = data["encrypted_data"]
-        val messageId = data["id"] ?: "unknown-${System.currentTimeMillis()}"
+        val messageId = data["id"] ?: "msg-${System.currentTimeMillis()}"
         val priority = data["priority"] ?: "default"
         val group = data["group"] ?: "general"
-        val timestamp = data["timestamp"]?.toLongOrNull() ?: System.currentTimeMillis()
 
-        // Try to decrypt and cache if we have the private key in session
-        val privateKey = SessionHolder.privateKeyHex
-        if (privateKey != null && encryptedData != null) {
-            scope.launch {
-                try {
-                    repository.ingestPushed(
-                        encryptedData = encryptedData,
-                        messageId = messageId,
-                        priority = priority,
-                        group = group,
-                        timestamp = timestamp,
-                        privateKeyHex = privateKey
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to decrypt pushed message", e)
-                }
-            }
-        }
-
-        // Always show a system notification
-        showNotification(encryptedData, priority, group, messageId, privateKey)
+        showNotification(messageId, priority, group)
     }
 
-    private fun showNotification(
-        encryptedData: String?,
-        priority: String,
-        group: String,
-        messageId: String,
-        privateKey: String?
-    ) {
-        // Try to decrypt title for notification
-        var title = "$group · 新消息"
-        var body = "点击查看详情"
+    // ─── Notification display ───
 
-        if (privateKey != null && encryptedData != null) {
-            try {
-                val ciphertext = Base64.decode(encryptedData, Base64.DEFAULT)
-                val plaintext = EciesManager.decrypt(privateKey, ciphertext)
-                val adapter = moshi.adapter(DecryptedPayload::class.java)
-                val payload = adapter.fromJson(String(plaintext, Charsets.UTF_8))
-                if (payload != null) {
-                    title = payload.title
-                    body = payload.body.take(100)
-                }
-            } catch (_: Exception) {
-                // Can't decrypt — use default text
-            }
-        }
+    private fun showNotification(messageId: String, priority: String, group: String) {
+        val title = "$group · 新消息"
+        val body = "点击查看详情"
 
         val channelId = when (priority) {
             "urgent" -> HxApp.CHANNEL_URGENT

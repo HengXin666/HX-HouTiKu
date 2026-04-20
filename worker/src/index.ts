@@ -11,6 +11,7 @@ import recipientRoutes from "./routes/recipients";
 import subscribeRoutes from "./routes/subscribe";
 import configRoutes from "./routes/config";
 import imageProxyRoutes from "./routes/image-proxy";
+import testPushRoutes from "./routes/test-push";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -38,6 +39,7 @@ app.route("/api/recipients", recipientRoutes);
 app.route("/api/subscribe", subscribeRoutes);
 app.route("/api/config", configRoutes);
 app.route("/api/image-proxy", imageProxyRoutes);
+app.route("/api/test-push", testPushRoutes);
 
 // --- 404 ---
 app.notFound((c) => c.json({ error: "Not found" }, 404));

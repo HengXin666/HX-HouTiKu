@@ -350,7 +350,9 @@ export function Settings() {
               <div className="settings-item-label">消息推送</div>
               <div className="settings-item-desc">
                 {isNativePlatform
-                  ? "使用原生推送 (FCM/APNs)"
+                  ? pushEnabled
+                    ? "已订阅原生推送 (FCM)"
+                    : "开启后接收实时推送"
                   : hasWebPush
                     ? Notification.permission === "denied"
                       ? "浏览器已禁止通知，请在设置中允许"
@@ -363,7 +365,7 @@ export function Settings() {
               </div>
             </div>
             <div className="settings-item-action">
-              {(hasWebPush || isNativePlatform) && Notification.permission !== "denied" && (
+              {(hasWebPush || isNativePlatform) && (!hasWebPush || Notification.permission !== "denied") && (
                 <Switch
                   checked={pushEnabled}
                   loading={pushLoading}

@@ -67,6 +67,9 @@ AI 定时任务、CI/CD、监控告警、工作流通知……消息来源越来
 | 推送 SDK | Python (eciespy + httpx) |
 | Android 推送 | Firebase Cloud Messaging (FCM) 系统级 |
 
+> 🇨🇳 **中国大陆用户**: `*.workers.dev` 默认域名在中国访问极不稳定。
+> 强烈建议绑定自定义域名, 详见 [部署教程 - 绑定自定义域名](./docs/DEPLOYMENT.md#推荐-绑定自定义域名解决中国大陆访问问题)。
+
 ---
 
 ## 快速开始
