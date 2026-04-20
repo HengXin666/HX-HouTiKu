@@ -335,6 +335,18 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        /**
+         * Save API base URL from the setup page.
+         * Called from the local index.html setup guide.
+         */
+        @JavascriptInterface
+        fun saveApiBase(url: String) {
+            getSharedPreferences("hx_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putString("api_base", url.trimEnd('/'))
+                .apply()
+        }
+
         @JavascriptInterface
         fun showToast(message: String) {
             runOnUiThread {

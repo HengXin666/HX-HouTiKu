@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>HX-HouTiKu 配置</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    padding-top: max(2rem, env(safe-area-inset-top, 0px));
+  }
+  .container { max-width: 400px; width: 100%; }
+  .icon {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+  h1 {
+    font-size: 1.375rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #f1f5f9;
+    text-align: center;
+  }
+  .subtitle {
+    font-size: 0.8125rem;
+    color: #64748b;
+    text-align: center;
+    margin-bottom: 2rem;
+    line-height: 1.5;
+  }
+  label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #94a3b8;
+    margin-bottom: 0.375rem;
+  }
+  input {
+    width: 100%;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.9375rem;
+    color: #e2e8f0;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  input:focus { border-color: #3b82f6; }
+  input::placeholder { color: #475569; }
+  .hint {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 0.375rem;
+    line-height: 1.4;
+  }
+  .btn {
+    width: 100%;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.875rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 1.5rem;
+    transition: background 0.2s, opacity 0.2s;
+  }
+  .btn:active { background: #2563eb; }
+  .btn:disabled { opacity: 0.5; }
+  .error {
+    background: #7f1d1d;
+    color: #fca5a5;
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+    margin-top: 1rem;
+    display: none;
+    line-height: 1.4;
+  }
+  .error.show { display: block; }
+  .spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.5em;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="icon">📲</div>
+  <h1>配置服务器</h1>
+  <p class="subtitle">首次使用需要输入你的 HX-HouTiKu 前端页面地址，<br>之后可在设置中修改。</p>
+
+  <label for="url">服务器地址</label>
+  <input id="url" type="url" placeholder="https://hx-houtiku.xxx.pages.dev" autocomplete="url" autocapitalize="none" spellcheck="false">
+  <div class="hint">填写你的 Cloudflare Pages 前端地址（不是 Worker API 地址）</div>
+
+  <button class="btn" id="connect" onclick="doConnect()">连接</button>
+  <div class="error" id="error"></div>
+</div>
+
+<script>
+  const urlInput = document.getElementById('url');
+  const btn = document.getElementById('connect');
+  const errorDiv = document.getElementById('error');
+
+  urlInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doConnect();
+  });
+
+  async function doConnect() {
+    const raw = urlInput.value.trim().replace(/\/+$/, '');
+    if (!raw) {
+      showError('请输入服务器地址');
+      return;
+    }
+    if (!raw.startsWith('https://') && !raw.startsWith('http://')) {
+      showError('地址需要以 https:// 开头');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>连接中…';
+    errorDiv.classList.remove('show');
+
+    try {
+      // Verify the URL is reachable
+      const resp = await fetch(raw, { method: 'HEAD', mode: 'no-cors' });
+      // If we get here (even opaque response), the server is reachable
+
+      // Save via JS Bridge if available
+      if (window.HxNative && window.HxNative.saveApiBase) {
+        window.HxNative.saveApiBase(raw);
+      }
+      // Navigate to the frontend
+      window.location.href = raw;
+    } catch (e) {
+      showError('无法连接到该地址，请检查 URL 是否正确以及网络是否通畅。');
+      btn.disabled = false;
+      btn.textContent = '连接';
+    }
+  }
+
+  function showError(msg) {
+    errorDiv.textContent = msg;
+    errorDiv.classList.add('show');
+  }
+</script>
+</body>
+</html>

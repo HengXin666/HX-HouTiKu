@@ -274,13 +274,11 @@ app.post("/", authPushToken(), async (c) => {
  *   6. Base64 encode the result
  */
 async function eciesEncrypt(recipientPubHex: string, plaintext: string): Promise<string> {
-  // Import the recipient's public key (uncompressed, 65 bytes starting with 0x04)
   let pubBytes = hexToBytes(recipientPubHex);
 
-  // If compressed (33 bytes), we need to decompress. For simplicity in Workers runtime,
-  // we require uncompressed keys (the frontend/SDK always stores uncompressed 65-byte keys).
-  if (pubBytes.length === 33) {
-    throw new Error("Compressed public keys not supported in test-push; use uncompressed (65-byte) keys");
+  // Decompress compressed public key (33 bytes → 65 bytes)
+  if (pubBytes.length === 33 && (pubBytes[0] === 0x02 || pubBytes[0] === 0x03)) {
+    pubBytes = decompressPublicKey(pubBytes);
   }
   if (pubBytes.length !== 65 || pubBytes[0] !== 0x04) {
     throw new Error(`Invalid public key: expected 65-byte uncompressed key starting with 0x04, got ${pubBytes.length} bytes`);
@@ -319,6 +317,38 @@ const P = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFF
 const N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
 const Gx = BigInt("0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798");
 const Gy = BigInt("0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8");
+
+/** Decompress a 33-byte compressed secp256k1 public key to 65-byte uncompressed. */
+function decompressPublicKey(compressed: Uint8Array): Uint8Array {
+  if (compressed.length !== 33 || (compressed[0] !== 0x02 && compressed[0] !== 0x03)) {
+    throw new Error("Invalid compressed public key");
+  }
+  const x = bytesToBigint(compressed.slice(1));
+  // y² = x³ + 7 (mod P)
+  const ySquared = mod(mod(x * x * x, P) + 7n, P);
+  // Tonelli–Shanks simplified for P ≡ 3 (mod 4): y = ySquared^((P+1)/4) mod P
+  const y = modPow(ySquared, (P + 1n) / 4n, P);
+  // Pick the y that matches the parity bit
+  const isEven = (y & 1n) === 0n;
+  const prefix = compressed[0];
+  const finalY = (prefix === 0x02) === isEven ? y : mod(P - y, P);
+  const result = new Uint8Array(65);
+  result[0] = 0x04;
+  result.set(bigintToBytes(x, 32), 1);
+  result.set(bigintToBytes(finalY, 32), 33);
+  return result;
+}
+
+function modPow(base: bigint, exp: bigint, m: bigint): bigint {
+  let result = 1n;
+  base = mod(base, m);
+  while (exp > 0n) {
+    if (exp & 1n) result = mod(result * base, m);
+    exp >>= 1n;
+    base = mod(base * base, m);
+  }
+  return result;
+}
 
 function mod(a: bigint, m: bigint): bigint {
   return ((a % m) + m) % m;
