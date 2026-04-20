@@ -2,7 +2,7 @@
 
 > 本文档说明如何构建 Android 原生 APK、配置 Firebase 实现系统级推送通知。
 >
-> **v2.0 起已彻底重构为 Kotlin + Jetpack Compose 原生开发，不再使用 Capacitor/WebView。**
+> **v3.0 使用 WebView 混合架构：Kotlin 原生壳 + React PWA 前端。** 原生壳负责 FCM 推送、通知权限等系统能力，UI 由 WebView 加载 Cloudflare Pages 上的 React 前端。
 
 ---
 
@@ -207,8 +207,9 @@ echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
 # 方法 B：直接从 Firebase Console 下载放入（仅开发机使用）
 # ⚠️ 绝对不要 git add 这个文件！.gitignore 已阻止。
 
-# 配置 API 地址 (gradle.properties 也已 gitignore)
-echo 'API_BASE=https://hx-houtiku-api.your-subdomain.workers.dev' >> gradle.properties
+# 配置前端地址 (gradle.properties 也已 gitignore)
+# ⚠️ 注意：这里填的是前端 Cloudflare Pages URL，不是 Worker API URL！
+echo 'API_BASE=https://hx-houtiku.your-pages-domain.pages.dev' >> gradle.properties
 
 # Debug 构建
 ./gradlew assembleDebug

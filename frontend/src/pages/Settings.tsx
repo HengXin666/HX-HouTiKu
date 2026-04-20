@@ -25,7 +25,7 @@ import {
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { resetAll, clearMessages, setPref, getPref } from "@/lib/db";
-import { invalidateApiBaseCache, sendTestPush, ApiError } from "@/lib/api";
+import { invalidateApiBaseCache, sendTestPush, sendTestPushSelf, ApiError } from "@/lib/api";
 import { copyToClipboard } from "@/lib/utils";
 import { isNativePlatform, hasWebNotification, hasWebPush } from "@/lib/platform";
 import { usePush } from "@/hooks/use-push";
@@ -65,6 +65,42 @@ export function Settings() {
   const [adminTokenInput, setAdminTokenInput] = useState("");
   const [testPushSending, setTestPushSending] = useState(false);
   const [adminTokenLoaded, setAdminTokenLoaded] = useState(false);
+  const [selfPushSending, setSelfPushSending] = useState(false);
+
+  // Push to self — uses Recipient Token, no Admin Token needed
+  const handleSelfPush = useCallback(async () => {
+    if (!recipientToken) {
+      Toast.show({ content: "请先配置 Recipient Token", position: "bottom" });
+      return;
+    }
+
+    setSelfPushSending(true);
+    try {
+      const result = await sendTestPushSelf(recipientToken);
+      if (result.push_sent) {
+        Toast.show({
+          content: `推送成功！已发送到 ${result.pushed_to.join(", ")}`,
+          position: "bottom",
+          duration: 3000,
+        });
+      } else {
+        Toast.show({
+          content: "消息已存储，但没有找到推送订阅（请先开启消息推送）",
+          position: "bottom",
+          duration: 3000,
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof ApiError
+        ? err.status === 401
+          ? "Recipient Token 无效，请检查后重试"
+          : err.message
+        : "发送失败，请检查网络";
+      Toast.show({ content: msg, position: "bottom", duration: 3000 });
+    } finally {
+      setSelfPushSending(false);
+    }
+  }, [recipientToken]);
 
   // Load saved admin token on first dialog open
   const openTestPushDialog = useCallback(async () => {
@@ -451,16 +487,37 @@ export function Settings() {
           </div>
 
           <button
-            onClick={openTestPushDialog}
+            onClick={handleSelfPush}
+            disabled={selfPushSending || !recipientToken}
             className="settings-item settings-item--btn"
           >
             <div className="settings-item-icon settings-item-icon--green">
               <Send />
             </div>
             <div className="settings-item-body">
-              <div className="settings-item-label">发送测试推送</div>
+              <div className="settings-item-label">
+                {selfPushSending ? "发送中…" : "推送给自己"}
+              </div>
               <div className="settings-item-desc">
-                验证推送管道是否正常工作
+                {recipientToken
+                  ? "使用 Recipient Token 向当前设备发送测试推送"
+                  : "需要先配置 Recipient Token"}
+              </div>
+            </div>
+            <ChevronRight className="settings-item-chevron" />
+          </button>
+
+          <button
+            onClick={openTestPushDialog}
+            className="settings-item settings-item--btn"
+          >
+            <div className="settings-item-icon settings-item-icon--slate">
+              <Send />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">推送给所有设备</div>
+              <div className="settings-item-desc">
+                需要 Admin Token，向所有活跃设备推送测试消息
               </div>
             </div>
             <ChevronRight className="settings-item-chevron" />

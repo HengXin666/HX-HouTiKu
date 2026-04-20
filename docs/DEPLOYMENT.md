@@ -519,7 +519,8 @@ VITE_API_BASE=https://api.yourdomain.com
 
 **Android (gradle.properties):**
 ```properties
-API_BASE=https://api.yourdomain.com
+# ⚠️ Android WebView 加载的是前端页面，不是 API！
+API_BASE=https://yourdomain.com
 ```
 
 **SDK 环境变量:**
@@ -632,10 +633,12 @@ npx wrangler whoami
 
 | 名称 | 值 | 说明 |
 |------|-----|------|
-| `VITE_API_BASE` | `https://hx-houtiku-api.xxx.workers.dev` | 后端地址，会编译进前端代码 |
+| `VITE_API_BASE` | `https://hx-houtiku-api.xxx.workers.dev` | 后端 API 地址，会编译进前端代码 |
+| `ANDROID_FRONTEND_URL` | `https://hx-houtiku.xxx.pages.dev` | 前端 Pages 地址，Android WebView 加载用 |
 
-> ⚠️ `VITE_API_BASE` 是 Variable（明文），不是 Secret。
-> 因为前端是静态站，这个值会被打包进 JS 文件中，放 Secret 里也没用。
+> ⚠️ `VITE_API_BASE` 和 `ANDROID_FRONTEND_URL` 是 Variable（明文），不是 Secret。
+> `VITE_API_BASE` 指向 Worker API 后端，`ANDROID_FRONTEND_URL` 指向 Cloudflare Pages 前端。
+> 两者不同！Android WebView 加载的是前端页面，前端再通过自身配置调用 API。
 
 ### 第 4 步: 验证流水线
 

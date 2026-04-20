@@ -92,8 +92,10 @@ cd android
 echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
 # ⚠️ 该文件已在 .gitignore 中，绝对不要提交到仓库！
 
-# 配置 API 地址 (gradle.properties 也已 gitignore)
-echo 'API_BASE=http://10.0.2.2:8787' >> gradle.properties
+# 配置前端地址 (gradle.properties 也已 gitignore)
+# ⚠️ 这是 WebView 加载的前端地址，不是 Worker API 地址！
+# 本地开发时指向 Vite dev server（10.0.2.2 是模拟器访问主机的 IP）
+echo 'API_BASE=http://10.0.2.2:5173' >> gradle.properties
 
 # 用 Android Studio 打开，或命令行构建
 ./gradlew assembleDebug

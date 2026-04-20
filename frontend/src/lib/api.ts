@@ -160,3 +160,20 @@ export function sendTestPush(
     body: JSON.stringify(data),
   });
 }
+
+export interface TestPushSelfResponse {
+  status: string;
+  id: string;
+  pushed_to: string[];
+  push_sent: boolean;
+}
+
+/** Send a test push to yourself using Recipient Token (no Admin Token needed). */
+export function sendTestPushSelf(
+  recipientToken: string
+): Promise<TestPushSelfResponse> {
+  return request("/api/test-push/self", {
+    method: "POST",
+    token: recipientToken,
+  });
+}

@@ -22,7 +22,7 @@
 
 import { Hono } from "hono";
 import type { Env, RecipientRow, PushSubscriptionRow } from "../types";
-import { authPushToken } from "../auth";
+import { authPushToken, authRecipientToken } from "../auth";
 
 interface TestPushRequest {
   title: string;
@@ -33,8 +33,102 @@ interface TestPushRequest {
   tags?: string[];
 }
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: { recipientId?: string } }>();
 
+// ── POST /self — Test push to yourself (Recipient Token auth) ──
+app.post("/self", authRecipientToken(), async (c) => {
+  const recipientId = c.get("recipientId");
+  if (!recipientId) {
+    return c.json({ error: "recipient_id required — check your Recipient Token" }, 400);
+  }
+
+  const recipient = await c.env.DB.prepare(
+    "SELECT id, name, public_key FROM recipients WHERE id = ? AND is_active = 1"
+  )
+    .bind(recipientId)
+    .first<RecipientRow>();
+
+  if (!recipient) {
+    return c.json({ error: "Recipient not found or inactive" }, 404);
+  }
+
+  const messageId = crypto.randomUUID();
+  const timestamp = Date.now();
+  const priority = "default";
+  const group = "general";
+
+  const plainPayload = JSON.stringify({
+    title: "🔔 测试推送",
+    body: "恭喜！推送管道工作正常 ✅",
+    tags: ["test"],
+  });
+
+  // Encrypt with recipient's own public key
+  let encryptedBase64: string;
+  try {
+    encryptedBase64 = await eciesEncrypt(recipient.public_key, plainPayload);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Encryption failed: ${msg}` }, 500);
+  }
+
+  // Store the message
+  await c.env.DB.prepare(
+    `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, timestamp, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(messageId, recipient.id, encryptedBase64, priority, "markdown", group, timestamp, timestamp).run();
+
+  // Send push notifications to this recipient's subscriptions
+  const subs = await c.env.DB.prepare(
+    "SELECT * FROM push_subscriptions WHERE recipient_id = ?"
+  )
+    .bind(recipient.id)
+    .all<PushSubscriptionRow>();
+
+  let pushSent = false;
+  if (subs.results.length > 0) {
+    pushSent = true;
+    const pushPayload = JSON.stringify({
+      type: "new_message",
+      message: {
+        id: messageId,
+        encrypted_data: encryptedBase64,
+        priority,
+        content_type: "markdown",
+        group,
+        timestamp,
+        is_read: false,
+      },
+    });
+
+    for (const sub of subs.results) {
+      try {
+        if (sub.endpoint.startsWith("fcm://")) {
+          await sendFcmPush(c.env, sub, pushPayload, priority, group);
+        } else {
+          await sendWebPush(c.env, sub, pushPayload);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Push failed for sub ${sub.id}: ${msg}`);
+        if (msg.includes("410") || msg.includes("expired")) {
+          await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
+            .bind(sub.id)
+            .run();
+        }
+      }
+    }
+  }
+
+  return c.json({
+    status: "ok",
+    id: messageId,
+    pushed_to: [recipient.name],
+    push_sent: pushSent,
+  }, 201);
+});
+
+// ── POST / — Test push to all/specified recipients (Admin/API Token auth) ──
 app.post("/", authPushToken(), async (c) => {
   const body = await c.req.json<TestPushRequest>();
 
