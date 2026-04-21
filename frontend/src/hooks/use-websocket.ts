@@ -44,8 +44,8 @@ export function useWebSocket(): UseWebSocketReturn {
   const ingestPushed = useMessageStore((s) => s.ingestPushed);
 
   const reconnectAttempt = useRef(0);
-  const heartbeatTimer = useRef<ReturnType<typeof setInterval>>();
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const heartbeatTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const privateKeyRef = useRef(privateKeyHex);
   const ingestRef = useRef(ingestPushed);
 
