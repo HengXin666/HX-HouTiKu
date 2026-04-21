@@ -92,7 +92,7 @@ export function Feed() {
           "feed-ws-status",
           wsStatus === "connected" && "feed-ws-status--connected",
           wsStatus === "connecting" && "feed-ws-status--connecting",
-          (wsStatus === "disconnected" || wsStatus === "error") && "feed-ws-status--disconnected",
+          (wsStatus === "disconnected" || wsStatus === "idle") && "feed-ws-status--disconnected",
         )}>
           {wsStatus === "connected" ? (
             <Wifi style={{ width: 14, height: 14 }} />

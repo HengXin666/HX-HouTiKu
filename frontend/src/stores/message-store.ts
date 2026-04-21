@@ -1,18 +1,18 @@
 /**
  * Message store — manages decrypted messages, fetching, and caching.
  *
- * Two data paths:
- * 1. fetchAndDecrypt() — initial load from server (GET /api/messages)
- * 2. ingestPushed()    — real-time: decrypt a message pushed via Web Push
+ * Data paths:
+ * 1. fetchAndDecrypt() — load from server (GET /api/messages)
+ * 2. addMessage()      — insert a single already-decrypted message (from WS or SW)
  *
- * After initial load, all new messages arrive via Web Push → ingestPushed().
- * No polling required.
+ * The store does NOT own any connection logic. WS/SW listeners live in
+ * use-messages.ts and call addMessage() after decryption.
  */
 
 import { create } from "zustand";
-import { fetchMessages, type EncryptedMessage } from "@/lib/api";
+import { fetchMessages } from "@/lib/api";
 import { markAsRead } from "@/lib/api";
-import { decryptMessage, type DecryptedMessage } from "@/lib/crypto";
+import { decryptMessage } from "@/lib/crypto";
 import {
   cacheMessages,
   getCachedMessages,
@@ -30,19 +30,8 @@ export interface Message {
   timestamp: number;
   is_read: boolean;
   tags: string[];
-}
-
-/** Raw pushed message from WebSocket or Service Worker (still encrypted) */
-export interface PushedEncryptedMessage {
-  id: string;
-  encrypted_data: string;
-  priority: string;
-  content_type: string;
-  group: string;
-  channel_id?: string;
-  group_key?: string;
-  timestamp: number;
-  is_read: boolean;
+  /** "ws" | "sw" | "fetch" — where did this message enter the store */
+  source?: string;
 }
 
 interface MessageState {
@@ -63,11 +52,8 @@ interface MessageState {
     privateKeyHex: string,
     options?: { since?: number; append?: boolean }
   ) => Promise<void>;
-  /** Ingest a single message pushed in real-time — decrypt and insert, no network call */
-  ingestPushed: (
-    privateKeyHex: string,
-    pushed: PushedEncryptedMessage
-  ) => void;
+  /** Insert a single already-decrypted message. Deduplicates by id. */
+  addMessage: (msg: Message) => void;
   markRead: (token: string, ids: string[]) => Promise<void>;
   setActiveTab: (tab: string) => void;
   setActiveGroup: (group: string | null) => void;
@@ -92,6 +78,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           tags: m.tags ?? [],
           channel_id: m.channel_id ?? "default",
           group_key: m.group_key ?? "",
+          source: "cache",
         })),
       });
     }
@@ -121,6 +108,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             timestamp: enc.timestamp,
             is_read: enc.is_read,
             tags: plain.tags ?? [],
+            source: "fetch",
           });
         } catch (err) {
           console.error(`Failed to decrypt message ${enc.id}:`, err);
@@ -135,6 +123,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             timestamp: enc.timestamp,
             is_read: enc.is_read,
             tags: [],
+            source: "fetch",
           });
         }
       }
@@ -183,53 +172,33 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }
   },
 
-  ingestPushed: (privateKeyHex, pushed) => {
+  addMessage: (msg) => {
     const existing = get().messages;
+    // Deduplicate by id
+    if (existing.some((m) => m.id === msg.id)) return;
 
-    // Deduplicate — skip if already present
-    if (existing.some((m) => m.id === pushed.id)) return;
+    const updated = [msg, ...existing].sort(
+      (a, b) => b.timestamp - a.timestamp
+    );
 
-    try {
-      const plain = decryptMessage(privateKeyHex, pushed.encrypted_data);
-      const msg: Message = {
-        id: pushed.id,
-        title: plain.title,
-        body: plain.body,
-        priority: pushed.priority,
-        group: pushed.group,
-        channel_id: pushed.channel_id ?? "default",
-        group_key: pushed.group_key ?? "",
-        timestamp: pushed.timestamp,
-        is_read: false,
-        tags: plain.tags ?? [],
-      };
+    set({
+      messages: updated,
+      totalUnread: get().totalUnread + (msg.is_read ? 0 : 1),
+    });
 
-      // Insert at correct position (sorted by timestamp desc)
-      const updated = [msg, ...existing].sort(
-        (a, b) => b.timestamp - a.timestamp
-      );
-
-      set({
-        messages: updated,
-        totalUnread: get().totalUnread + 1,
-      });
-
-      // Cache in background (fire-and-forget)
-      cacheMessages([{
-        id: msg.id,
-        title: msg.title,
-        body: msg.body,
-        priority: msg.priority,
-        group: msg.group,
-        channel_id: msg.channel_id,
-        group_key: msg.group_key,
-        timestamp: msg.timestamp,
-        is_read: msg.is_read,
-        tags: msg.tags,
-      }]).catch(() => {});
-    } catch (err) {
-      console.error("Failed to decrypt pushed message:", err);
-    }
+    // Cache in background
+    cacheMessages([{
+      id: msg.id,
+      title: msg.title,
+      body: msg.body,
+      priority: msg.priority,
+      group: msg.group,
+      channel_id: msg.channel_id,
+      group_key: msg.group_key,
+      timestamp: msg.timestamp,
+      is_read: msg.is_read,
+      tags: msg.tags,
+    }]).catch(() => {});
   },
 
   markRead: async (token, ids) => {

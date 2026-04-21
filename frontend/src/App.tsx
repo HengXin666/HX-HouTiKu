@@ -11,6 +11,7 @@ import { Settings } from "@/pages/Settings";
 import { AppShell } from "@/components/layout/AppShell";
 import { registerPushSubscription } from "@/lib/push";
 import { hasWebPush, isNativeAndroid } from "@/lib/platform";
+import { wsInit, wsDestroy } from "@/lib/ws-manager";
 
 export function App() {
   const status = useAuthStore((s) => s.status);
@@ -23,6 +24,15 @@ export function App() {
     initAuth();
     initSettings();
   }, [initAuth, initSettings]);
+
+  // ── WebSocket lifecycle: init when unlocked, destroy on lock/logout ──
+  useEffect(() => {
+    if (status === "unlocked" && recipientToken) {
+      wsInit(recipientToken);
+    } else {
+      wsDestroy();
+    }
+  }, [status, recipientToken]);
 
   // Auto-register push when unlocked + pushEnabled + permission already granted
   useEffect(() => {
