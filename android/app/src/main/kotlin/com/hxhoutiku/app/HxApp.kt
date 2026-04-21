@@ -10,6 +10,8 @@ class HxApp : Application() {
         const val CHANNEL_URGENT = "hx_push_urgent"
         const val CHANNEL_HIGH = "hx_push_high"
         const val CHANNEL_DEFAULT = "hx_push_default"
+        const val CHANNEL_LOW = "hx_push_low"
+        const val CHANNEL_DEBUG = "hx_push_debug"
     }
 
     override fun onCreate() {
@@ -52,6 +54,26 @@ class HxApp : Application() {
             vibrationPattern = longArrayOf(0, 100)
         }
 
-        manager.createNotificationChannels(listOf(urgent, high, default_))
+        val low = NotificationChannel(
+            CHANNEL_LOW,
+            getString(R.string.channel_low),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = getString(R.string.channel_low_desc)
+            enableVibration(false)
+            setShowBadge(false)
+        }
+
+        val debug = NotificationChannel(
+            CHANNEL_DEBUG,
+            getString(R.string.channel_debug),
+            NotificationManager.IMPORTANCE_MIN
+        ).apply {
+            description = getString(R.string.channel_debug_desc)
+            enableVibration(false)
+            setShowBadge(false)
+        }
+
+        manager.createNotificationChannels(listOf(urgent, high, default_, low, debug))
     }
 }

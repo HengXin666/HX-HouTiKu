@@ -6,6 +6,7 @@ import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import json from "react-syntax-highlighter/dist/esm/languages/hljs/json";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import { FileText, Code2, Globe, FileJson } from "lucide-react";
+import DOMPurify from "dompurify";
 import { getApiBase } from "@/lib/api";
 
 SyntaxHighlighter.registerLanguage("json", json);
@@ -304,8 +305,14 @@ function HtmlRenderer({ content }: { content: string }) {
     }
     const shadow = shadowRef.current;
 
-    // Proxy all image URLs in the HTML content
-    const safeHtml = proxyHtmlImages(content);
+    // Proxy all image URLs in the HTML content, then sanitize
+    const proxiedHtml = proxyHtmlImages(content);
+    const safeHtml = DOMPurify.sanitize(proxiedHtml, {
+      ADD_TAGS: ["style"],
+      ADD_ATTR: ["target", "rel", "referrerpolicy", "crossorigin"],
+      FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
+      FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover"],
+    });
     shadow.innerHTML = `<style>${SHADOW_STYLES}</style>${safeHtml}`;
 
     // Also set referrerPolicy on all images in shadow DOM

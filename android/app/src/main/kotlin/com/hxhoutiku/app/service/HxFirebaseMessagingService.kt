@@ -56,7 +56,7 @@ class HxFirebaseMessagingService : FirebaseMessagingService() {
         scope.launch {
             try {
                 val url = URL("${apiBase.trimEnd('/')}/api/subscribe")
-                val body = """{"endpoint":"fcm://$token","keys":{"p256dh":"native-fcm","auth":"native-fcm"}}"""
+                val body = """{"endpoint":"fcm://$token","keys":{"p256dh":"native-fcm","auth":"native-fcm"},"device_type":"android"}"""
 
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
@@ -97,6 +97,8 @@ class HxFirebaseMessagingService : FirebaseMessagingService() {
         val channelId = when (priority) {
             "urgent" -> HxApp.CHANNEL_URGENT
             "high" -> HxApp.CHANNEL_HIGH
+            "low" -> HxApp.CHANNEL_LOW
+            "debug" -> HxApp.CHANNEL_DEBUG
             else -> HxApp.CHANNEL_DEFAULT
         }
 
@@ -120,6 +122,8 @@ class HxFirebaseMessagingService : FirebaseMessagingService() {
                 when (priority) {
                     "urgent" -> NotificationCompat.PRIORITY_MAX
                     "high" -> NotificationCompat.PRIORITY_HIGH
+                    "low" -> NotificationCompat.PRIORITY_LOW
+                    "debug" -> NotificationCompat.PRIORITY_MIN
                     else -> NotificationCompat.PRIORITY_DEFAULT
                 }
             )

@@ -1,18 +1,18 @@
 /**
- * Hook for message management — push-driven, zero polling.
+ * Hook for message management — WebSocket-first, push-driven, zero polling.
  *
- * Data flow:
- * 1. Initial load: GET /api/messages (one-time D1 query on mount)
- * 2. Real-time: Web Push → Service Worker → postMessage → ingestPushed()
- *    (messages arrive pre-encrypted in the push payload, decrypted locally)
- * 3. Focus refresh: only when returning after >5min away (safety net)
+ * Data flow (three layers):
+ *   Layer 1: DO WebSocket → useWebSocket() → ingestPushed() [real-time, <100ms]
+ *   Layer 2: Web Push → Service Worker → postMessage → ingestPushed() [offline fallback]
+ *   Layer 3: GET /api/messages on initial load + focus recovery after >5min [catch-up]
  *
- * No setInterval. No polling. D1 is queried only on initial load.
+ * No setInterval. No polling. D1 is queried only on initial load / long absence.
  */
 
 import { useEffect, useCallback, useRef } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore, type PushedEncryptedMessage } from "@/stores/message-store";
+import { useWebSocket } from "./use-websocket";
 
 /** Only refresh from server if away for more than 5 minutes */
 const STALE_THRESHOLD = 5 * 60_000;
@@ -28,6 +28,9 @@ export function useMessages() {
   const lastFetchRef = useRef(0);
   const hiddenSinceRef = useRef<number | null>(null);
 
+  // Layer 1: WebSocket real-time connection (primary channel)
+  const { status: wsStatus, deviceCount } = useWebSocket();
+
   /** Full server refresh (queries D1) — used sparingly */
   const serverRefresh = useCallback(() => {
     if (!recipientToken || !privateKeyHex) return;
@@ -41,8 +44,7 @@ export function useMessages() {
     serverRefresh();
   }, [loadCached, serverRefresh]);
 
-  // Listen for pushed messages from Service Worker
-  // This is the PRIMARY data path for new messages — no polling needed
+  // Layer 2: Listen for pushed messages from Service Worker (offline fallback)
   useEffect(() => {
     if (!privateKeyHex) return;
 
@@ -50,13 +52,9 @@ export function useMessages() {
       const data = event.data;
 
       if (data?.type === "PUSH_MESSAGE" && data.message) {
-        // New format: full encrypted message in push payload
-        // Decrypt and insert directly — zero D1 queries
         const pushed: PushedEncryptedMessage = data.message;
         ingestPushed(privateKeyHex, pushed);
       } else if (data?.type === "NEW_PUSH_MESSAGE") {
-        // Legacy fallback: push only contained metadata
-        // Must do a server fetch (queries D1)
         serverRefresh();
       }
     };
@@ -72,14 +70,12 @@ export function useMessages() {
     };
   }, [privateKeyHex, ingestPushed, serverRefresh]);
 
-  // Track when the tab goes hidden — refresh on return after long absence
+  // Layer 3: Track visibility — refresh on return after long absence
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
         hiddenSinceRef.current = Date.now();
       } else if (document.visibilityState === "visible") {
-        // Only refresh from server if we were away for >5min
-        // This handles the case where push messages were missed while sleeping
         const hiddenSince = hiddenSinceRef.current;
         hiddenSinceRef.current = null;
         if (hiddenSince && Date.now() - hiddenSince > STALE_THRESHOLD) {
@@ -92,5 +88,5 @@ export function useMessages() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [serverRefresh]);
 
-  return { messages, loading, refresh: serverRefresh };
+  return { messages, loading, refresh: serverRefresh, wsStatus, deviceCount };
 }

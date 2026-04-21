@@ -16,6 +16,8 @@ def push(
     priority: str = "default",
     content_type: str = "markdown",
     group: str = "general",
+    channel_id: str = "default",
+    group_key: str = "",
     recipients: list[str] | None = None,
 ) -> dict:
     """Send an encrypted push notification using environment variable config.
@@ -35,5 +37,7 @@ def push(
         priority=priority,
         content_type=content_type,
         group=group,
+        channel_id=channel_id,
+        group_key=group_key,
         recipients=recipients,
     )

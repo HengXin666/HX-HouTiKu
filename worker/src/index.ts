@@ -12,6 +12,8 @@ import subscribeRoutes from "./routes/subscribe";
 import configRoutes from "./routes/config";
 import imageProxyRoutes from "./routes/image-proxy";
 import testPushRoutes from "./routes/test-push";
+import websocketRoutes from "./routes/websocket";
+import channelRoutes from "./routes/channels";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -40,6 +42,8 @@ app.route("/api/subscribe", subscribeRoutes);
 app.route("/api/config", configRoutes);
 app.route("/api/image-proxy", imageProxyRoutes);
 app.route("/api/test-push", testPushRoutes);
+app.route("/api/ws", websocketRoutes);
+app.route("/api/channels", channelRoutes);
 
 // --- 404 ---
 app.notFound((c) => c.json({ error: "Not found" }, 404));
@@ -50,10 +54,13 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error" }, 500);
 });
 
-// --- Export ---
+// --- Export Worker ---
 export default {
   fetch: app.fetch,
   scheduled: async (event: ScheduledEvent, env: Env) => {
     await handleScheduled(env);
   },
 };
+
+// --- Export Durable Object classes ---
+export { MessageRelay } from "./durable-objects/message-relay";

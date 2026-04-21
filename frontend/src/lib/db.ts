@@ -33,6 +33,8 @@ interface UPushDB {
       body: string;
       priority: string;
       group: string;
+      channel_id?: string;
+      group_key?: string;
       timestamp: number;
       is_read: boolean;
       tags?: string[];

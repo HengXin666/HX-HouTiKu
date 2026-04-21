@@ -15,6 +15,7 @@ app.get("/", authRecipientToken(), async (c) => {
   const limit = Math.min(Number(c.req.query("limit") || "50"), 200);
   const group = c.req.query("group");
   const priority = c.req.query("priority");
+  const channelId = c.req.query("channel_id");
 
   let query = "SELECT * FROM messages WHERE recipient_id = ? AND timestamp > ?";
   const params: (string | number)[] = [recipientId, since];
@@ -27,6 +28,11 @@ app.get("/", authRecipientToken(), async (c) => {
   if (priority) {
     query += " AND priority = ?";
     params.push(priority);
+  }
+
+  if (channelId) {
+    query += " AND channel_id = ?";
+    params.push(channelId);
   }
 
   query += " ORDER BY timestamp DESC LIMIT ?";
@@ -42,6 +48,8 @@ app.get("/", authRecipientToken(), async (c) => {
     priority: row.priority,
     content_type: row.content_type ?? "markdown",
     group: row.group_name,
+    channel_id: row.channel_id ?? "default",
+    group_key: row.group_key ?? "",
     timestamp: row.timestamp,
     is_read: row.is_read === 1,
   }));
@@ -73,7 +81,6 @@ app.post("/read", authRecipientToken(), async (c) => {
     return c.json({ error: "message_ids required" }, 400);
   }
 
-  // Batch update — D1 doesn't support IN clause with bindings well, so batch individual updates
   const statements = message_ids.map((id) =>
     c.env.DB.prepare(
       "UPDATE messages SET is_read = 1 WHERE id = ? AND recipient_id = ?"

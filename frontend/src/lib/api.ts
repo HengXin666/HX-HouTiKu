@@ -73,6 +73,8 @@ export interface EncryptedMessage {
   encrypted_data: string;
   priority: string;
   group: string;
+  channel_id: string;
+  group_key: string;
   timestamp: number;
   is_read: boolean;
 }
@@ -146,7 +148,8 @@ export interface TestPushResponse {
   status: string;
   id: string;
   pushed_to: string[];
-  web_push_sent: string[];
+  ws_sent: string[];
+  push_sent: string[];
   encryption_errors?: string[];
 }
 
@@ -165,6 +168,7 @@ export interface TestPushSelfResponse {
   status: string;
   id: string;
   pushed_to: string[];
+  ws_sent: boolean;
   push_sent: boolean;
 }
 
@@ -175,5 +179,43 @@ export function sendTestPushSelf(
   return request("/api/test-push/self", {
     method: "POST",
     token: recipientToken,
+  });
+}
+
+// --- Channels API ---
+
+export interface Channel {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  icon: string;
+  color: string;
+}
+
+export function fetchChannels(
+  token: string,
+): Promise<{ channels: Channel[] }> {
+  return request("/api/channels", { token });
+}
+
+export function createChannel(
+  token: string,
+  data: { name: string; display_name: string; description?: string; icon?: string; color?: string },
+): Promise<{ id: string; name: string; display_name: string }> {
+  return request("/api/channels", {
+    method: "POST",
+    token,
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteChannel(
+  token: string,
+  channelId: string,
+): Promise<{ status: string; name: string }> {
+  return request(`/api/channels/${channelId}`, {
+    method: "DELETE",
+    token,
   });
 }

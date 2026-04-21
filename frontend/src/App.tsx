@@ -69,6 +69,8 @@ function AppContent({ status }: { status: string }) {
     <AppShell>
       <Routes>
         <Route path="/" element={<Feed />} />
+        <Route path="/channels" element={<Feed />} />
+        <Route path="/channels/:channelId" element={<Feed />} />
         <Route path="/groups" element={<GroupView />} />
         <Route path="/groups/:groupName" element={<Feed />} />
         <Route path="/message/:id" element={<MessageDetail />} />

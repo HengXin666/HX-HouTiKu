@@ -1,28 +1,20 @@
 /**
  * POST /api/test-push — Test push endpoint.
  *
- * Accepts a **plaintext** message (title + body), encrypts it
- * server-side for each target recipient using their stored public key,
- * then delegates to the standard push pipeline (DB insert + Web Push / FCM).
+ * Accepts a **plaintext** message, encrypts it server-side for each target
+ * recipient using their stored public key (ECIES secp256k1 via @noble/curves),
+ * then delivers via the standard three-layer pipeline (DO WebSocket + Web Push + FCM).
  *
- * This is intentionally admin-only — it bypasses the normal client-side
- * encryption workflow and is meant solely for verifying that the push
- * pipeline works end-to-end.
- *
- * Request body:
- *   {
- *     "title": "Test message",
- *     "body":  "Hello from the server!",
- *     "priority": "default",          // optional
- *     "group": "general",             // optional
- *     "recipients": ["my-phone"],     // optional — all active if omitted
- *     "tags": ["test"]                // optional
- *   }
+ * Admin-only — bypasses normal client-side encryption for testing.
  */
 
 import { Hono } from "hono";
-import type { Env, RecipientRow, PushSubscriptionRow } from "../types";
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { hkdf } from "@noble/hashes/hkdf";
+import { sha256 } from "@noble/hashes/sha256";
+import type { Env, RecipientRow } from "../types";
 import { authPushToken, authRecipientToken } from "../auth";
+import { deliverToRecipient } from "../push-service";
 
 interface TestPushRequest {
   title: string;
@@ -31,6 +23,7 @@ interface TestPushRequest {
   group?: string;
   recipients?: string[];
   tags?: string[];
+  channel_id?: string;
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { recipientId?: string } }>();
@@ -54,8 +47,6 @@ app.post("/self", authRecipientToken(), async (c) => {
 
   const messageId = crypto.randomUUID();
   const timestamp = Date.now();
-  const priority = "default";
-  const group = "general";
 
   const plainPayload = JSON.stringify({
     title: "🔔 测试推送",
@@ -63,7 +54,6 @@ app.post("/self", authRecipientToken(), async (c) => {
     tags: ["test"],
   });
 
-  // Encrypt with recipient's own public key
   let encryptedBase64: string;
   try {
     encryptedBase64 = await eciesEncrypt(recipient.public_key, plainPayload);
@@ -72,59 +62,28 @@ app.post("/self", authRecipientToken(), async (c) => {
     return c.json({ error: `Encryption failed: ${msg}` }, 500);
   }
 
-  // Store the message
   await c.env.DB.prepare(
-    `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, timestamp, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(messageId, recipient.id, encryptedBase64, priority, "markdown", group, timestamp, timestamp).run();
+    `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, channel_id, group_key, timestamp, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(messageId, recipient.id, encryptedBase64, "default", "markdown", "general", "default", "", timestamp, timestamp).run();
 
-  // Send push notifications to this recipient's subscriptions
-  const subs = await c.env.DB.prepare(
-    "SELECT * FROM push_subscriptions WHERE recipient_id = ?"
-  )
-    .bind(recipient.id)
-    .all<PushSubscriptionRow>();
-
-  let pushSent = false;
-  if (subs.results.length > 0) {
-    pushSent = true;
-    const pushPayload = JSON.stringify({
-      type: "new_message",
-      message: {
-        id: messageId,
-        encrypted_data: encryptedBase64,
-        priority,
-        content_type: "markdown",
-        group,
-        timestamp,
-        is_read: false,
-      },
-    });
-
-    for (const sub of subs.results) {
-      try {
-        if (sub.endpoint.startsWith("fcm://")) {
-          await sendFcmPush(c.env, sub, pushPayload, priority, group);
-        } else {
-          await sendWebPush(c.env, sub, pushPayload);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`Push failed for sub ${sub.id}: ${msg}`);
-        if (msg.includes("410") || msg.includes("expired")) {
-          await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
-            .bind(sub.id)
-            .run();
-        }
-      }
-    }
-  }
+  const delivery = await deliverToRecipient(c.env, recipient.id, {
+    id: messageId,
+    encrypted_data: encryptedBase64,
+    priority: "default",
+    content_type: "markdown",
+    group: "general",
+    timestamp,
+    channel_id: "default",
+    group_key: "",
+  });
 
   return c.json({
     status: "ok",
     id: messageId,
     pushed_to: [recipient.name],
-    push_sent: pushSent,
+    ws_sent: delivery.ws_sent,
+    push_sent: delivery.push_sent,
   }, 201);
 });
 
@@ -139,17 +98,15 @@ app.post("/", authPushToken(), async (c) => {
   const messageId = crypto.randomUUID();
   const priority = body.priority ?? "default";
   const group = body.group ?? "general";
+  const channelId = body.channel_id ?? "default";
   const timestamp = Date.now();
-  const now = timestamp;
 
-  // Build the plaintext payload (same JSON structure that clients expect after decryption)
   const plainPayload = JSON.stringify({
     title: body.title,
     body: body.body,
     tags: body.tags ?? [],
   });
 
-  // Resolve target recipients
   let targetNames = body.recipients;
   if (!targetNames || targetNames.length === 0) {
     const allRecipients = await c.env.DB.prepare(
@@ -163,7 +120,8 @@ app.post("/", authPushToken(), async (c) => {
   }
 
   const pushedTo: string[] = [];
-  const webPushSent: string[] = [];
+  const wsSent: string[] = [];
+  const pushSent: string[] = [];
   const encryptionErrors: string[] = [];
   const statements: D1PreparedStatement[] = [];
 
@@ -179,7 +137,6 @@ app.post("/", authPushToken(), async (c) => {
       continue;
     }
 
-    // Encrypt the plaintext payload using the recipient's public key (ECIES secp256k1)
     let encryptedBase64: string;
     try {
       encryptedBase64 = await eciesEncrypt(recipient.public_key, plainPayload);
@@ -193,55 +150,26 @@ app.post("/", authPushToken(), async (c) => {
 
     statements.push(
       c.env.DB.prepare(
-        `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, timestamp, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(msgId, recipient.id, encryptedBase64, priority, "markdown", group, timestamp, now)
+        `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, channel_id, group_key, timestamp, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(msgId, recipient.id, encryptedBase64, priority, "markdown", group, channelId, "", timestamp, timestamp)
     );
 
     pushedTo.push(name);
 
-    // ── Send push notifications ──
-    const subs = await c.env.DB.prepare(
-      "SELECT * FROM push_subscriptions WHERE recipient_id = ?"
-    )
-      .bind(recipient.id)
-      .all<PushSubscriptionRow>();
+    const delivery = await deliverToRecipient(c.env, recipient.id, {
+      id: msgId,
+      encrypted_data: encryptedBase64,
+      priority,
+      content_type: "markdown",
+      group,
+      timestamp,
+      channel_id: channelId,
+      group_key: "",
+    });
 
-    if (subs.results.length > 0) {
-      webPushSent.push(name);
-
-      const pushPayload = JSON.stringify({
-        type: "new_message",
-        message: {
-          id: msgId,
-          encrypted_data: encryptedBase64,
-          priority,
-          content_type: "markdown",
-          group,
-          timestamp,
-          is_read: false,
-        },
-      });
-
-      for (const sub of subs.results) {
-        try {
-          if (sub.endpoint.startsWith("fcm://")) {
-            await sendFcmPush(c.env, sub, pushPayload, priority, group);
-          } else {
-            await sendWebPush(c.env, sub, pushPayload);
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`Push failed for sub ${sub.id}: ${msg}`);
-
-          if (msg.includes("410") || msg.includes("expired")) {
-            await c.env.DB.prepare("DELETE FROM push_subscriptions WHERE id = ?")
-              .bind(sub.id)
-              .run();
-          }
-        }
-      }
-    }
+    if (delivery.ws_sent) wsSent.push(name);
+    if (delivery.push_sent) pushSent.push(name);
   }
 
   if (statements.length > 0) {
@@ -252,220 +180,49 @@ app.post("/", authPushToken(), async (c) => {
     status: "ok",
     id: messageId,
     pushed_to: pushedTo,
-    web_push_sent: webPushSent,
+    ws_sent: wsSent,
+    push_sent: pushSent,
     encryption_errors: encryptionErrors.length > 0 ? encryptionErrors : undefined,
   }, 201);
 });
 
-// ─── ECIES Encryption (secp256k1, compatible with eciesjs / eciespy / Android BouncyCastle) ───
+// ─── ECIES Encryption (secp256k1 via @noble/curves) ───
 
 /**
- * Encrypt plaintext using ECIES on secp256k1.
+ * ECIES encrypt using secp256k1, compatible with eciesjs v0.4 format.
  *
- * Output format (compatible with eciesjs v0.4):
- *   ephemeral_uncompressed_pubkey (65 bytes) || iv (16 bytes) || tag (16 bytes) || ciphertext
- *
- * Steps:
- *   1. Generate an ephemeral secp256k1 key pair
- *   2. ECDH shared secret = ephemeral_private × recipient_public
- *   3. HKDF-SHA256(ikm=shared_x, salt='', info='') → 32 bytes AES key
- *   4. AES-256-GCM(key, iv=random_16, plaintext) → (ciphertext, tag)
- *   5. Concatenate: ephemeral_pub(65) || iv(16) || tag(16) || ciphertext
- *   6. Base64 encode the result
+ * Output: base64( ephemeral_pub_uncompressed(65) || iv(16) || tag(16) || ciphertext )
  */
 async function eciesEncrypt(recipientPubHex: string, plaintext: string): Promise<string> {
-  let pubBytes = hexToBytes(recipientPubHex);
+  const pubHex = recipientPubHex.startsWith("0x") ? recipientPubHex.slice(2) : recipientPubHex;
 
-  // Decompress compressed public key (33 bytes → 65 bytes)
-  if (pubBytes.length === 33 && (pubBytes[0] === 0x02 || pubBytes[0] === 0x03)) {
-    pubBytes = decompressPublicKey(pubBytes);
-  }
-  if (pubBytes.length !== 65 || pubBytes[0] !== 0x04) {
-    throw new Error(`Invalid public key: expected 65-byte uncompressed key starting with 0x04, got ${pubBytes.length} bytes`);
-  }
+  // Use @noble/curves to decompress / validate the public key
+  const pubPoint = secp256k1.ProjectivePoint.fromHex(pubHex);
+  const recipientPubBytes = pubPoint.toRawBytes(false); // 65 bytes, uncompressed
 
   // Generate ephemeral key pair
-  const ephemeral = await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
-    true,
-    ["deriveBits"]
+  const ephPrivKey = secp256k1.utils.randomPrivateKey();
+  const ephPubPoint = secp256k1.ProjectivePoint.BASE.multiply(
+    bytesToBigint(ephPrivKey)
   );
-
-  // Since Workers crypto doesn't support secp256k1 natively, we use a pure-JS approach:
-  // We'll use the eciesjs-compatible format but leverage the existing push.ts's web crypto
-  // for the AES-GCM part. However, secp256k1 ECDH is not available in Web Crypto.
-  //
-  // Alternative strategy: use a simpler encryption that the client can still decrypt.
-  // Actually, the cleanest approach for a TEST endpoint is to use a known working method.
-  //
-  // Since this is a Cloudflare Worker and secp256k1 is NOT supported in WebCrypto,
-  // we'll take a different approach: call the existing push pipeline with pre-encrypted data.
-  // But wait — we need to actually encrypt.
-  //
-  // The pragmatic solution: implement ECIES using pure JavaScript math for secp256k1.
-  // This is a test-only endpoint so performance isn't critical.
-
-  // We'll use a simplified approach — since the Worker environment may not support secp256k1,
-  // let's use a mini elliptic curve implementation.
-  return eciesEncryptSecp256k1(pubBytes, new TextEncoder().encode(plaintext));
-}
-
-// ─── Pure-JS secp256k1 ECIES for Cloudflare Workers ───
-
-// secp256k1 curve parameters
-const P = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F");
-const N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-const Gx = BigInt("0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798");
-const Gy = BigInt("0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8");
-
-/** Decompress a 33-byte compressed secp256k1 public key to 65-byte uncompressed. */
-function decompressPublicKey(compressed: Uint8Array): Uint8Array {
-  if (compressed.length !== 33 || (compressed[0] !== 0x02 && compressed[0] !== 0x03)) {
-    throw new Error("Invalid compressed public key");
-  }
-  const x = bytesToBigint(compressed.slice(1));
-  // y² = x³ + 7 (mod P)
-  const ySquared = mod(mod(x * x * x, P) + 7n, P);
-  // Tonelli–Shanks simplified for P ≡ 3 (mod 4): y = ySquared^((P+1)/4) mod P
-  const y = modPow(ySquared, (P + 1n) / 4n, P);
-  // Pick the y that matches the parity bit
-  const isEven = (y & 1n) === 0n;
-  const prefix = compressed[0];
-  const finalY = (prefix === 0x02) === isEven ? y : mod(P - y, P);
-  const result = new Uint8Array(65);
-  result[0] = 0x04;
-  result.set(bigintToBytes(x, 32), 1);
-  result.set(bigintToBytes(finalY, 32), 33);
-  return result;
-}
-
-function modPow(base: bigint, exp: bigint, m: bigint): bigint {
-  let result = 1n;
-  base = mod(base, m);
-  while (exp > 0n) {
-    if (exp & 1n) result = mod(result * base, m);
-    exp >>= 1n;
-    base = mod(base * base, m);
-  }
-  return result;
-}
-
-function mod(a: bigint, m: bigint): bigint {
-  return ((a % m) + m) % m;
-}
-
-function modInv(a: bigint, m: bigint): bigint {
-  let [old_r, r] = [a, m];
-  let [old_s, s] = [1n, 0n];
-  while (r !== 0n) {
-    const q = old_r / r;
-    [old_r, r] = [r, old_r - q * r];
-    [old_s, s] = [s, old_s - q * s];
-  }
-  return mod(old_s, m);
-}
-
-type Point = { x: bigint; y: bigint } | null;
-
-function pointAdd(p1: Point, p2: Point): Point {
-  if (!p1) return p2;
-  if (!p2) return p1;
-  if (p1.x === p2.x && p1.y === p2.y) {
-    // Point doubling
-    const s = mod(3n * p1.x * p1.x * modInv(2n * p1.y, P), P);
-    const x = mod(s * s - 2n * p1.x, P);
-    const y = mod(s * (p1.x - x) - p1.y, P);
-    return { x, y };
-  }
-  if (p1.x === p2.x) return null; // point at infinity
-  const s = mod((p2.y - p1.y) * modInv(p2.x - p1.x, P), P);
-  const x = mod(s * s - p1.x - p2.x, P);
-  const y = mod(s * (p1.x - x) - p1.y, P);
-  return { x, y };
-}
-
-function pointMul(k: bigint, p: Point): Point {
-  let result: Point = null;
-  let addend = p;
-  let scalar = k;
-  while (scalar > 0n) {
-    if (scalar & 1n) result = pointAdd(result, addend);
-    addend = pointAdd(addend, addend);
-    scalar >>= 1n;
-  }
-  return result;
-}
-
-function bigintToBytes(n: bigint, len: number): Uint8Array {
-  const hex = n.toString(16).padStart(len * 2, "0");
-  return hexToBytes(hex);
-}
-
-function bytesToBigint(bytes: Uint8Array): bigint {
-  let hex = "";
-  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
-  return BigInt("0x" + (hex || "0"));
-}
-
-function pointToUncompressed(p: Point): Uint8Array {
-  if (!p) throw new Error("Cannot serialize point at infinity");
-  const result = new Uint8Array(65);
-  result[0] = 0x04;
-  result.set(bigintToBytes(p.x, 32), 1);
-  result.set(bigintToBytes(p.y, 32), 33);
-  return result;
-}
-
-function parseUncompressedPoint(bytes: Uint8Array): Point {
-  if (bytes.length !== 65 || bytes[0] !== 0x04) throw new Error("Invalid uncompressed point");
-  const x = bytesToBigint(bytes.slice(1, 33));
-  const y = bytesToBigint(bytes.slice(33, 65));
-  return { x, y };
-}
-
-async function hkdfSha256(ikm: Uint8Array, length: number): Promise<Uint8Array> {
-  // HKDF with empty salt and empty info (eciesjs default)
-  const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits(
-    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: new Uint8Array(0) },
-    key,
-    length * 8
-  );
-  return new Uint8Array(bits);
-}
-
-async function eciesEncryptSecp256k1(recipientPubBytes: Uint8Array, plaintext: Uint8Array): Promise<string> {
-  const G: Point = { x: Gx, y: Gy };
-  const recipientPoint = parseUncompressedPoint(recipientPubBytes);
-
-  // Generate ephemeral private key
-  const ephPrivBytes = crypto.getRandomValues(new Uint8Array(32));
-  let ephPriv = bytesToBigint(ephPrivBytes);
-  // Ensure it's in valid range [1, N-1]
-  ephPriv = mod(ephPriv, N - 1n) + 1n;
-
-  // Ephemeral public key
-  const ephPub = pointMul(ephPriv, G);
-  const ephPubBytes = pointToUncompressed(ephPub);
+  const ephPubBytes = ephPubPoint.toRawBytes(false); // 65 bytes
 
   // ECDH: shared = ephPriv × recipientPub
-  const shared = pointMul(ephPriv, recipientPoint);
-  if (!shared) throw new Error("ECDH resulted in point at infinity");
+  const sharedPoint = pubPoint.multiply(bytesToBigint(ephPrivKey));
+  const sharedX = bigintToBytes(sharedPoint.x, 32);
 
-  // Use shared secret x-coordinate as IKM for HKDF
-  const sharedX = bigintToBytes(shared.x, 32);
-  const aesKey = await hkdfSha256(sharedX, 32);
+  // HKDF-SHA256(ikm=shared_x, salt='', info='') → 32 bytes AES key
+  const aesKeyBytes = hkdf(sha256, sharedX, new Uint8Array(0), new Uint8Array(0), 32);
 
-  // AES-256-GCM encryption
+  // AES-256-GCM
   const iv = crypto.getRandomValues(new Uint8Array(16));
-  const cryptoKey = await crypto.subtle.importKey("raw", aesKey, "AES-GCM", false, ["encrypt"]);
+  const cryptoKey = await crypto.subtle.importKey("raw", aesKeyBytes, "AES-GCM", false, ["encrypt"]);
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv, tagLength: 128 },
     cryptoKey,
-    plaintext
+    new TextEncoder().encode(plaintext),
   );
 
-  // encrypted contains ciphertext + tag (last 16 bytes)
   const encBytes = new Uint8Array(encrypted);
   const ciphertext = encBytes.slice(0, encBytes.length - 16);
   const tag = encBytes.slice(encBytes.length - 16);
@@ -483,73 +240,17 @@ async function eciesEncryptSecp256k1(recipientPubBytes: Uint8Array, plaintext: U
   return btoa(binary);
 }
 
-// ─── Push helpers (copied from push.ts to avoid circular deps) ───
-
-async function sendFcmPush(
-  env: Env,
-  sub: PushSubscriptionRow,
-  payload: string,
-  priority: string,
-  group: string,
-): Promise<void> {
-  if (!env.FCM_SERVICE_ACCOUNT) {
-    console.warn("FCM_SERVICE_ACCOUNT not configured — skipping native push");
-    return;
-  }
-
-  const { sendFcmPush: fcmSend } = await import("../fcm");
-  const deviceToken = sub.endpoint.replace("fcm://", "");
-
-  await fcmSend(env.FCM_SERVICE_ACCOUNT, {
-    deviceToken,
-    payload,
-    priority,
-    group,
-  });
+function bytesToBigint(bytes: Uint8Array): bigint {
+  let hex = "";
+  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+  return BigInt("0x" + (hex || "0"));
 }
 
-async function sendWebPush(
-  env: Env,
-  sub: PushSubscriptionRow,
-  payload: string
-): Promise<void> {
-  const { generatePushHTTPRequest } = await import("../webpush");
-
-  const { headers, body, endpoint } = await generatePushHTTPRequest({
-    applicationServerKeys: {
-      publicKey: env.VAPID_PUBLIC_KEY,
-      privateKey: env.VAPID_PRIVATE_KEY,
-    },
-    payload,
-    target: {
-      endpoint: sub.endpoint,
-      keys: {
-        p256dh: sub.key_p256dh,
-        auth: sub.key_auth,
-      },
-    },
-    adminContact: "mailto:admin@hx-houtiku.dev",
-    ttl: 60 * 60,
-  });
-
-  const resp = await fetch(endpoint, { method: "POST", headers, body });
-
-  if (!resp.ok) {
-    const respBody = await resp.text().catch(() => "");
-    if (resp.status === 410 || resp.status === 404) {
-      throw new Error("410 Subscription expired");
-    }
-    throw new Error(`Web Push failed: ${resp.status} — ${respBody}`);
-  }
-}
-
-// ─── Hex helpers ───
-
-function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < clean.length; i += 2) {
-    bytes[i / 2] = parseInt(clean.slice(i, i + 2), 16);
+function bigintToBytes(n: bigint, len: number): Uint8Array {
+  const hex = n.toString(16).padStart(len * 2, "0");
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }

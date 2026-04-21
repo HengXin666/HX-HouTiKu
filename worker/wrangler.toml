@@ -31,6 +31,18 @@ binding = "DB"                        # 代码中通过 env.DB 访问
 database_name = "hx-houtiku"          # 数据库名称
 database_id = "82df3835-5359-4ecc-9258-816a97a01d4a" # ← 替换为你的 database_id! 
 
+# Durable Objects 绑定
+# MessageRelay: 每个 recipient 一个实例, 负责 WebSocket 实时推送
+[durable_objects]
+bindings = [
+  { name = "MESSAGE_RELAY", class_name = "MessageRelay" }
+]
+
+# DO 迁移配置 (首次部署必须)
+[[migrations]]
+tag = "v1"
+new_classes = ["MessageRelay"]
+
 # 明文环境变量(非敏感信息)
 [vars]
 ENCRYPTION_CURVE = "secp256k1"  # ECIES 加密使用的椭圆曲线, 不要修改

@@ -12,14 +12,23 @@ from hx_houtiku.config import Config
 from hx_houtiku.crypto import encrypt_for_recipient
 from hx_houtiku.models import ContentType, Message, Priority, Recipient
 
+# Default TTL for recipient public key cache (1 hour)
+_CACHE_TTL = 3600.0
+
+# Retry config
+_MAX_RETRIES = 3
+_RETRY_BASE = 1.0  # 1 second base for exponential backoff
+_RETRY_STATUSES = {502, 503, 504, 429}
+
 
 class HxHoutikuClient:
     """Client for sending encrypted push notifications.
 
-    Recipients can be:
-    - Configured locally (via constructor / env / config file)
-    - Fetched automatically from the Worker API (if not configured)
-    - Mixed: local config as fallback, explicit fetch to refresh
+    Features:
+    - Public key caching with configurable TTL (default: 1 hour)
+    - Automatic retry with exponential backoff for transient failures
+    - Batch sending support
+    - Channel and group_key support
     """
 
     def __init__(
@@ -30,18 +39,27 @@ class HxHoutikuClient:
         *,
         timeout: float = 30.0,
         auto_fetch_recipients: bool = True,
+        cache_ttl: float = _CACHE_TTL,
+        max_retries: int = _MAX_RETRIES,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.api_token = api_token
         self.timeout = timeout
         self._auto_fetch = auto_fetch_recipients
+        self._cache_ttl = cache_ttl
+        self._max_retries = max_retries
 
         self._recipients: list[Recipient] = []
+        self._cache_time: float = 0.0
+
         for r in recipients or []:
             if isinstance(r, dict):
                 self._recipients.append(Recipient(name=r["name"], public_key=r["public_key"]))
             else:
                 self._recipients.append(r)
+
+        if self._recipients:
+            self._cache_time = time.monotonic()
 
         self._http = httpx.Client(
             base_url=self.endpoint,
@@ -51,18 +69,21 @@ class HxHoutikuClient:
 
     @property
     def recipients(self) -> list[Recipient]:
-        """Active recipients. Auto-fetches from API if none configured."""
-        if not self._recipients and self._auto_fetch:
+        """Active recipients. Auto-fetches from API if cache expired or empty."""
+        if self._is_cache_expired():
             self.fetch_recipients()
         return self._recipients
 
+    def _is_cache_expired(self) -> bool:
+        if not self._recipients and self._auto_fetch:
+            return True
+        if self._cache_ttl > 0 and self._recipients:
+            return (time.monotonic() - self._cache_time) > self._cache_ttl
+        return False
+
     @classmethod
     def from_env(cls) -> HxHoutikuClient:
-        """Create client from environment variables.
-
-        Recipients are optional — if HX_HOUTIKU_RECIPIENTS is not set,
-        they will be fetched automatically from the Worker API.
-        """
+        """Create client from environment variables."""
         config = Config.from_env()
         return cls(
             endpoint=config.endpoint,
@@ -81,13 +102,8 @@ class HxHoutikuClient:
         )
 
     def fetch_recipients(self) -> list[Recipient]:
-        """Fetch active recipients from the Worker API.
-
-        Updates the local recipient list and returns it.
-        Call this to refresh after adding/removing devices.
-        """
-        resp = self._http.get("/api/recipients")
-        resp.raise_for_status()
+        """Fetch active recipients from the Worker API. Updates cache."""
+        resp = self._request_with_retry("GET", "/api/recipients")
         data = resp.json()
 
         self._recipients = [
@@ -95,6 +111,7 @@ class HxHoutikuClient:
             for r in data.get("recipients", [])
             if r.get("is_active", True)
         ]
+        self._cache_time = time.monotonic()
         return self._recipients
 
     def send(
@@ -105,6 +122,8 @@ class HxHoutikuClient:
         priority: str = "default",
         content_type: str = "markdown",
         group: str = "general",
+        channel_id: str = "default",
+        group_key: str = "",
         recipients: list[str] | None = None,
         tags: list[str] | None = None,
     ) -> dict:
@@ -116,7 +135,9 @@ class HxHoutikuClient:
             priority: One of: urgent, high, default, low, debug.
             content_type: One of: text, markdown, html, json.
             group: Group/category name.
-            recipients: List of recipient names to send to. None = all.
+            channel_id: Channel identifier (default: "default").
+            group_key: Key for grouping related messages (e.g. CI build number).
+            recipients: List of recipient names. None = all active recipients.
             tags: Optional tags for the message.
 
         Returns:
@@ -147,15 +168,51 @@ class HxHoutikuClient:
             "priority": priority,
             "content_type": content_type,
             "group": group,
+            "channel_id": channel_id,
+            "group_key": group_key,
             "timestamp": int(time.time() * 1000),
         }
 
-        resp = self._http.post("/api/push", json=payload)
-        resp.raise_for_status()
+        resp = self._request_with_retry("POST", "/api/push", json=payload)
         return resp.json()
 
+    def send_batch(
+        self,
+        messages: list[dict],
+        *,
+        channel_id: str = "default",
+        group_key: str = "",
+        recipients: list[str] | None = None,
+    ) -> list[dict]:
+        """Send multiple messages in sequence.
+
+        Each item in messages should have keys: title, body, priority, content_type, group, tags.
+
+        Returns:
+            List of API response dicts, one per message.
+        """
+        results = []
+        for msg in messages:
+            result = self.send(
+                title=msg["title"],
+                body=msg.get("body", ""),
+                priority=msg.get("priority", "default"),
+                content_type=msg.get("content_type", "markdown"),
+                group=msg.get("group", "general"),
+                channel_id=channel_id,
+                group_key=group_key,
+                recipients=recipients,
+                tags=msg.get("tags"),
+            )
+            results.append(result)
+        return results
+
+    def invalidate_cache(self) -> None:
+        """Force the next property access to re-fetch recipients from API."""
+        self._cache_time = 0.0
+
     def _resolve_recipients(self, names: list[str] | None) -> list[Recipient]:
-        all_recipients = self.recipients  # triggers auto-fetch if empty
+        all_recipients = self.recipients
         if not all_recipients:
             raise ValueError(
                 "No recipients available. "
@@ -169,6 +226,43 @@ class HxHoutikuClient:
         if missing:
             raise ValueError(f"Unknown recipients: {missing}")
         return matched
+
+    def _request_with_retry(
+        self,
+        method: str,
+        path: str,
+        **kwargs: object,
+    ) -> httpx.Response:
+        """Execute an HTTP request with exponential backoff retry."""
+        last_err: Exception | None = None
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                resp = self._http.request(method, path, **kwargs)
+
+                if resp.status_code in _RETRY_STATUSES and attempt < self._max_retries:
+                    delay = _RETRY_BASE * (2**attempt)
+                    # Honor Retry-After header if present
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            delay = max(delay, float(retry_after))
+                        except ValueError:
+                            pass
+                    time.sleep(delay)
+                    continue
+
+                resp.raise_for_status()
+                return resp
+
+            except (httpx.ConnectError, httpx.ReadTimeout) as e:
+                last_err = e
+                if attempt < self._max_retries:
+                    time.sleep(_RETRY_BASE * (2**attempt))
+                    continue
+                raise
+
+        raise last_err  # type: ignore[misc]
 
     def close(self) -> None:
         self._http.close()

@@ -25,18 +25,22 @@ export interface Message {
   body: string;
   priority: string;
   group: string;
+  channel_id: string;
+  group_key: string;
   timestamp: number;
   is_read: boolean;
   tags: string[];
 }
 
-/** Raw pushed message from Service Worker (still encrypted) */
+/** Raw pushed message from WebSocket or Service Worker (still encrypted) */
 export interface PushedEncryptedMessage {
   id: string;
   encrypted_data: string;
   priority: string;
   content_type: string;
   group: string;
+  channel_id?: string;
+  group_key?: string;
   timestamp: number;
   is_read: boolean;
 }
@@ -83,7 +87,12 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     const cached = await getCachedMessages(200);
     if (cached.length > 0) {
       set({
-        messages: cached.map((m) => ({ ...m, tags: m.tags ?? [] })),
+        messages: cached.map((m) => ({
+          ...m,
+          tags: m.tags ?? [],
+          channel_id: m.channel_id ?? "default",
+          group_key: m.group_key ?? "",
+        })),
       });
     }
   },
@@ -107,6 +116,8 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             body: plain.body,
             priority: enc.priority,
             group: enc.group,
+            channel_id: enc.channel_id ?? "default",
+            group_key: enc.group_key ?? "",
             timestamp: enc.timestamp,
             is_read: enc.is_read,
             tags: plain.tags ?? [],
@@ -119,6 +130,8 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             body: "无法解密此消息，可能密钥不匹配。",
             priority: enc.priority,
             group: enc.group,
+            channel_id: enc.channel_id ?? "default",
+            group_key: enc.group_key ?? "",
             timestamp: enc.timestamp,
             is_read: enc.is_read,
             tags: [],
@@ -134,6 +147,8 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           body: m.body,
           priority: m.priority,
           group: m.group,
+          channel_id: m.channel_id,
+          group_key: m.group_key,
           timestamp: m.timestamp,
           is_read: m.is_read,
           tags: m.tags,
@@ -182,6 +197,8 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         body: plain.body,
         priority: pushed.priority,
         group: pushed.group,
+        channel_id: pushed.channel_id ?? "default",
+        group_key: pushed.group_key ?? "",
         timestamp: pushed.timestamp,
         is_read: false,
         tags: plain.tags ?? [],
@@ -204,6 +221,8 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         body: msg.body,
         priority: msg.priority,
         group: msg.group,
+        channel_id: msg.channel_id,
+        group_key: msg.group_key,
         timestamp: msg.timestamp,
         is_read: msg.is_read,
         tags: msg.tags,

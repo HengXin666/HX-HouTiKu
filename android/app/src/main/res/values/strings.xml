@@ -7,4 +7,8 @@
     <string name="channel_high_desc">重要消息 — 震动、弹窗</string>
     <string name="channel_default">普通消息</string>
     <string name="channel_default_desc">普通消息 — 静默通知</string>
+    <string name="channel_low">低优先级</string>
+    <string name="channel_low_desc">低优先级 — 无声音、无震动</string>
+    <string name="channel_debug">调试</string>
+    <string name="channel_debug_desc">调试消息 — 最低优先级</string>
 </resources>

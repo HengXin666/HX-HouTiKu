@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@types/react-syntax-highlighter": "^15.5.13",
+    "dompurify": "^3.2.4",
     "eciesjs": "^0.4.14",
     "idb": "^8.0.2",
     "lucide-react": "^0.475.0",

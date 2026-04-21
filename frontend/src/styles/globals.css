@@ -674,6 +674,45 @@ body {
   padding: 0.75rem 1rem;
 }
 
+/* WebSocket status bar */
+.feed-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+}
+.feed-ws-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+}
+.feed-ws-status--connected {
+  color: var(--color-priority-low);
+  background: rgba(0, 186, 124, 0.1);
+}
+.feed-ws-status--connecting {
+  color: var(--color-accent);
+  background: rgba(247, 147, 26, 0.1);
+  animation: pulse 1.5s infinite;
+}
+.feed-ws-status--disconnected {
+  color: var(--color-muted-foreground);
+  background: rgba(113, 118, 123, 0.1);
+}
+.feed-status-count {
+  font-size: 0.8125rem;
+}
+.feed-status-count strong {
+  color: var(--color-primary);
+}
+
 /* Tabs — like X.com's "For you / Following" tabs */
 .feed-tabs {
   display: flex;

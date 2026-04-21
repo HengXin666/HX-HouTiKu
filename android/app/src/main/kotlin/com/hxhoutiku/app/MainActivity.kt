@@ -82,6 +82,11 @@ class MainActivity : ComponentActivity() {
 
         setContentView(webView)
 
+        // WebView debugging only in debug builds
+        if (BuildConfig.DEBUG) {
+            WebView.setWebContentsDebuggingEnabled(true)
+        }
+
         configureWebView()
 
         // Load the frontend
@@ -305,7 +310,7 @@ class MainActivity : ComponentActivity() {
                 try {
                     val fcmToken = FirebaseMessaging.getInstance().token.await()
                     val url = "${apiBase.trimEnd('/')}/api/subscribe"
-                    val body = """{"endpoint":"fcm://$fcmToken","keys":{"p256dh":"native-fcm","auth":"native-fcm"}}"""
+                    val body = """{"endpoint":"fcm://$fcmToken","keys":{"p256dh":"native-fcm","auth":"native-fcm"},"device_type":"android"}"""
 
                     val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                     conn.requestMethod = "POST"

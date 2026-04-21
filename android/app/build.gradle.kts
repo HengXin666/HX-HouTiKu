@@ -1,7 +1,16 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.google.services)
+}
+
+// Apply google-services plugin only when google-services.json exists.
+// This allows the project to compile without Firebase credentials for development.
+val googleServicesFile = file("google-services.json")
+if (googleServicesFile.exists()) {
+    apply(plugin = libs.plugins.google.services.get().pluginId)
+} else {
+    logger.warn("⚠️  google-services.json not found — Firebase features will not work at runtime.")
+    logger.warn("   Copy google-services.json.example → google-services.json and fill in your Firebase values.")
 }
 
 android {
