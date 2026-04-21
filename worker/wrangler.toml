@@ -39,9 +39,10 @@ bindings = [
 ]
 
 # DO 迁移配置 (首次部署必须)
+# 免费套餐必须使用 new_sqlite_classes (而非 new_classes)
 [[migrations]]
 tag = "v1"
-new_classes = ["MessageRelay"]
+new_sqlite_classes = ["MessageRelay"]
 
 # 明文环境变量(非敏感信息)
 [vars]
