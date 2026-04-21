@@ -1,53 +1,83 @@
 /**
- * Hook for message management — orchestrates data from three layers.
+ * Message hooks — split into two concerns:
  *
- * Layer 1: WS (ws-manager global singleton) → wsOnMessage → decrypt → addMessage
- * Layer 2: Service Worker push → postMessage → decrypt → addMessage
- * Layer 3: GET /api/messages on initial load + focus recovery after >5 min
+ * 1. useMessageReceiver() — global, mounted in AppShell (never unmounts).
+ *    Wires up WS + SW listeners → decrypt → addMessage.
+ *    Also handles initial load and visibility catchup.
  *
- * This hook does NOT own the WebSocket connection.
- * ws-manager is initialized/destroyed in App.tsx based on auth state.
+ * 2. useMessages() — page-level, returns messages + refresh + status.
+ *    Thin read-only wrapper, safe to mount/unmount freely.
  */
 
 import { useEffect, useRef, useCallback } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore, type Message } from "@/stores/message-store";
 import { useWebSocket } from "./use-websocket";
-import { wsOnMessage, wsWasStale, type WsNewMessagePayload } from "@/lib/ws-manager";
+import {
+  wsOnMessage,
+  wsWasStale,
+  type WsNewMessagePayload,
+} from "@/lib/ws-manager";
 import { decryptMessage } from "@/lib/crypto";
 
-export function useMessages() {
+// ─── Notification queue (consumed by NotificationToast) ──────
+
+export type IncomingNotification = {
+  id: string;
+  title: string;
+  body: string;
+  priority: string;
+  group: string;
+  timestamp: number;
+};
+
+type NotifyListener = (n: IncomingNotification) => void;
+const notifyListeners = new Set<NotifyListener>();
+
+/** Subscribe to incoming message notifications. Returns unsubscribe fn. */
+export function onIncomingNotification(fn: NotifyListener): () => void {
+  notifyListeners.add(fn);
+  return () => { notifyListeners.delete(fn); };
+}
+
+function emitNotification(msg: Message) {
+  const n: IncomingNotification = {
+    id: msg.id,
+    title: msg.title,
+    body: msg.body,
+    priority: msg.priority,
+    group: msg.group,
+    timestamp: msg.timestamp,
+  };
+  for (const fn of notifyListeners) fn(n);
+}
+
+// ─── useMessageReceiver — GLOBAL (mount once in AppShell) ────
+
+export function useMessageReceiver() {
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
   const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
   const addMessage = useMessageStore((s) => s.addMessage);
   const loadCached = useMessageStore((s) => s.loadCached);
-  const messages = useMessageStore((s) => s.messages);
-  const loading = useMessageStore((s) => s.loading);
 
-  // WS status (read-only, from ws-manager via useSyncExternalStore)
-  const { status: wsStatus, deviceCount } = useWebSocket();
-
-  // Refs to avoid re-creating callbacks when auth values change
-  const privateKeyRef = useRef(privateKeyHex);
-  privateKeyRef.current = privateKeyHex;
+  // Refs to keep callbacks stable
+  const pkRef = useRef(privateKeyHex);
+  pkRef.current = privateKeyHex;
   const tokenRef = useRef(recipientToken);
   tokenRef.current = recipientToken;
-
-  // Stable addMessage ref
-  const addMessageRef = useRef(addMessage);
-  addMessageRef.current = addMessage;
+  const addRef = useRef(addMessage);
+  addRef.current = addMessage;
   const fetchRef = useRef(fetchAndDecrypt);
   fetchRef.current = fetchAndDecrypt;
 
-  /** Decrypt a pushed encrypted payload and insert into the store. */
+  /** Decrypt a raw WS/SW payload, insert into store, fire notification. */
   const decryptAndInsert = useCallback(
     (payload: WsNewMessagePayload, source: string) => {
-      const pkHex = privateKeyRef.current;
-      if (!pkHex) return;
-
+      const pk = pkRef.current;
+      if (!pk) return;
       try {
-        const plain = decryptMessage(pkHex, payload.encrypted_data);
+        const plain = decryptMessage(pk, payload.encrypted_data);
         const msg: Message = {
           id: payload.id,
           title: plain.title,
@@ -61,7 +91,8 @@ export function useMessages() {
           tags: plain.tags ?? [],
           source,
         };
-        addMessageRef.current(msg);
+        addRef.current(msg);
+        emitNotification(msg);
       } catch (err) {
         console.error(`Failed to decrypt ${source} message:`, err);
       }
@@ -69,67 +100,70 @@ export function useMessages() {
     [],
   );
 
-  // ── Layer 1: WebSocket real-time messages ──────────────────
+  // Layer 1: WS real-time
   useEffect(() => {
-    const unsub = wsOnMessage((payload) => {
-      decryptAndInsert(payload, "ws");
-    });
-    return unsub;
+    return wsOnMessage((payload) => decryptAndInsert(payload, "ws"));
   }, [decryptAndInsert]);
 
-  // ── Layer 2: Service Worker push messages ──────────────────
+  // Layer 2: Service Worker push
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    const handleSWMessage = (event: MessageEvent) => {
-      const data = event.data;
-      if (data?.type === "PUSH_MESSAGE" && data.message) {
-        decryptAndInsert(data.message, "sw");
-      } else if (data?.type === "NEW_PUSH_MESSAGE") {
-        // SW says "there's a new push but I couldn't include the data"
+    const handler = (event: MessageEvent) => {
+      const d = event.data;
+      if (d?.type === "PUSH_MESSAGE" && d.message) {
+        decryptAndInsert(d.message, "sw");
+      } else if (d?.type === "NEW_PUSH_MESSAGE") {
         const t = tokenRef.current;
-        const pk = privateKeyRef.current;
+        const pk = pkRef.current;
         if (t && pk) fetchRef.current(t, pk);
       }
     };
 
-    navigator.serviceWorker.addEventListener("message", handleSWMessage);
-    return () => {
-      navigator.serviceWorker.removeEventListener("message", handleSWMessage);
-    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
   }, [decryptAndInsert]);
 
-  // ── Layer 3: Initial load + visibility catchup ─────────────
+  // Layer 3: Initial load
   useEffect(() => {
     loadCached();
     if (recipientToken && privateKeyHex) {
       fetchAndDecrypt(recipientToken, privateKeyHex);
     }
-    // Only run on mount (deps are stable store actions + auth values at mount)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Catchup after long absence (visibility change)
+  // Layer 3: Visibility catchup after long absence
   useEffect(() => {
-    const handleVisibility = () => {
+    const handler = () => {
       if (document.visibilityState !== "visible") return;
-      // Only fetch from server if we were hidden long enough to be stale
       if (!wsWasStale()) return;
       const t = tokenRef.current;
-      const pk = privateKeyRef.current;
+      const pk = pkRef.current;
       if (t && pk) fetchRef.current(t, pk);
     };
 
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
   }, []);
+}
 
-  /** Manual refresh — for pull-to-refresh or retry button. */
+// ─── useMessages — PAGE-LEVEL (read-only) ────────────────────
+
+export function useMessages() {
+  const recipientToken = useAuthStore((s) => s.recipientToken);
+  const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
+  const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
+  const messages = useMessageStore((s) => s.messages);
+  const loading = useMessageStore((s) => s.loading);
+
+  const { status: wsStatus, deviceCount } = useWebSocket();
+
   const refresh = useCallback(() => {
-    const t = tokenRef.current;
-    const pk = privateKeyRef.current;
-    if (t && pk) fetchRef.current(t, pk);
-  }, []);
+    if (recipientToken && privateKeyHex) {
+      fetchAndDecrypt(recipientToken, privateKeyHex);
+    }
+  }, [recipientToken, privateKeyHex, fetchAndDecrypt]);
 
   return { messages, loading, refresh, wsStatus, deviceCount };
 }

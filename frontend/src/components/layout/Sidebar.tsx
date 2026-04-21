@@ -7,11 +7,13 @@ import {
   RefreshCw,
   Lock,
   Unlock,
-  ChevronRight,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
+import type { WsStatus } from "@/lib/ws-manager";
 
 const NAV_ITEMS = [
   {
@@ -31,7 +33,12 @@ const NAV_ITEMS = [
   },
 ] as const;
 
-export function Sidebar() {
+interface SidebarProps {
+  wsStatus: WsStatus;
+  deviceCount: number;
+}
+
+export function Sidebar({ wsStatus, deviceCount }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const deviceName = useAuthStore((s) => s.deviceName);
@@ -83,6 +90,29 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-spacer" />
+
+      {/* WS connection status */}
+      <div className="sidebar-ws-status">
+        <div className={cn(
+          "sidebar-ws-indicator",
+          wsStatus === "connected" && "sidebar-ws-indicator--connected",
+          wsStatus === "connecting" && "sidebar-ws-indicator--connecting",
+          (wsStatus === "disconnected" || wsStatus === "idle") && "sidebar-ws-indicator--disconnected",
+        )}>
+          {wsStatus === "connected" ? (
+            <Wifi style={{ width: 14, height: 14 }} />
+          ) : (
+            <WifiOff style={{ width: 14, height: 14 }} />
+          )}
+          <span>
+            {wsStatus === "connected"
+              ? `实时连接${deviceCount > 1 ? ` · ${deviceCount} 设备` : ""}`
+              : wsStatus === "connecting"
+                ? "连接中..."
+                : "离线"}
+          </span>
+        </div>
+      </div>
 
       {/* Quick actions */}
       <div className="sidebar-actions">
