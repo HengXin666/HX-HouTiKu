@@ -14,6 +14,7 @@ import imageProxyRoutes from "./routes/image-proxy";
 import testPushRoutes from "./routes/test-push";
 import websocketRoutes from "./routes/websocket";
 import channelRoutes from "./routes/channels";
+import cloneRoutes from "./routes/clone";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -44,6 +45,7 @@ app.route("/api/image-proxy", imageProxyRoutes);
 app.route("/api/test-push", testPushRoutes);
 app.route("/api/ws", websocketRoutes);
 app.route("/api/channels", channelRoutes);
+app.route("/api/clone", cloneRoutes);
 
 // --- 404 ---
 app.notFound((c) => c.json({ error: "Not found" }, 404));

@@ -35,10 +35,10 @@ CREATE TABLE IF NOT EXISTS channels (
 INSERT OR IGNORE INTO channels (id, name, display_name, description, is_active, created_at, updated_at)
 VALUES ('default', 'general', '通用', '默认消息频道', 1, 0, 0);
 
--- 3. Messages (core table, stores encrypted payloads)
+-- 3. Messages (core table, stores encrypted payloads — global, shared across all devices)
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
-    recipient_id TEXT NOT NULL,
+    recipient_id TEXT NOT NULL DEFAULT '',
     encrypted_data TEXT NOT NULL,
     priority TEXT NOT NULL DEFAULT 'default',
     content_type TEXT NOT NULL DEFAULT 'markdown',
@@ -50,7 +50,6 @@ CREATE TABLE IF NOT EXISTS messages (
     delivered_at INTEGER DEFAULT 0,
     expires_at INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
-    FOREIGN KEY (recipient_id) REFERENCES recipients(id),
     FOREIGN KEY (channel_id) REFERENCES channels(id)
 );
 

@@ -128,6 +128,14 @@ export function SetupWizard() {
               开始设置
               <ArrowRight className="setup-btn-icon" />
             </button>
+
+            <button
+              onClick={() => window.location.href = "/clone"}
+              className="setup-btn setup-btn--ghost"
+              style={{ marginTop: "0.5rem" }}
+            >
+              从其他设备导入
+            </button>
           </div>
         )}
 

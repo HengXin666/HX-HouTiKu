@@ -109,6 +109,17 @@ export function markAsRead(
   });
 }
 
+export function deleteMessages(
+  token: string,
+  messageIds: string[]
+): Promise<{ deleted: number }> {
+  return request("/api/messages", {
+    method: "DELETE",
+    token,
+    body: JSON.stringify({ message_ids: messageIds }),
+  });
+}
+
 export interface ConfigResponse {
   vapid_public_key: string;
   version: string;
@@ -217,5 +228,27 @@ export function deleteChannel(
   return request(`/api/channels/${channelId}`, {
     method: "DELETE",
     token,
+  });
+}
+
+// --- Clone API ---
+
+export function cloneOffer(
+  token: string,
+  encryptedBundle: string,
+): Promise<{ code: string; expires_at: number; expires_in_seconds: number }> {
+  return request("/api/clone/offer", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ encrypted_bundle: encryptedBundle }),
+  });
+}
+
+export function cloneClaim(
+  code: string,
+): Promise<{ encrypted_bundle: string }> {
+  return request("/api/clone/claim", {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 }

@@ -11,7 +11,7 @@
 
 import { create } from "zustand";
 import { fetchMessages } from "@/lib/api";
-import { markAsRead } from "@/lib/api";
+import { markAsRead, deleteMessages } from "@/lib/api";
 import { decryptMessage } from "@/lib/crypto";
 import {
   cacheMessages,
@@ -55,6 +55,7 @@ interface MessageState {
   /** Insert a single already-decrypted message. Deduplicates by id. */
   addMessage: (msg: Message) => void;
   markRead: (token: string, ids: string[]) => Promise<void>;
+  deleteMessage: (token: string, ids: string[]) => Promise<void>;
   setActiveTab: (tab: string) => void;
   setActiveGroup: (group: string | null) => void;
   clear: () => void;
@@ -211,6 +212,20 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       ),
       totalUnread: Math.max(0, state.totalUnread - ids.length),
     }));
+  },
+
+  deleteMessage: async (token, ids) => {
+    await deleteMessages(token, ids);
+
+    set((state) => {
+      const unreadRemoved = state.messages.filter(
+        (m) => ids.includes(m.id) && !m.is_read
+      ).length;
+      return {
+        messages: state.messages.filter((m) => !ids.includes(m.id)),
+        totalUnread: Math.max(0, state.totalUnread - unreadRemoved),
+      };
+    });
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),

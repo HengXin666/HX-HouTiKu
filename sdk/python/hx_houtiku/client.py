@@ -155,16 +155,13 @@ class HxHoutikuClient:
         plaintext = message.to_plaintext()
         target_recipients = self._resolve_recipients(recipients)
 
-        encrypted_payloads: dict[str, str] = {}
-        for recipient in target_recipients:
-            encrypted_payloads[recipient.name] = encrypt_for_recipient(
-                recipient.public_key, plaintext
-            )
+        # Encrypt once with the first recipient's key — all devices share the same key
+        first = target_recipients[0]
+        encrypted = encrypt_for_recipient(first.public_key, plaintext)
 
         payload = {
             "id": str(uuid.uuid4()),
-            "recipients": [r.name for r in target_recipients],
-            "encrypted_payloads": encrypted_payloads,
+            "encrypted_payloads": {first.name: encrypted},
             "priority": priority,
             "content_type": content_type,
             "group": group,

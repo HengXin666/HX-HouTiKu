@@ -89,7 +89,6 @@ PAYLOAD=$(python3 -c "
 import json, sys
 print(json.dumps({
     'id': sys.argv[1],
-    'recipients': [sys.argv[2]],
     'encrypted_payloads': {sys.argv[2]: sys.argv[3]},
     'priority': sys.argv[4],
     'group': sys.argv[5],

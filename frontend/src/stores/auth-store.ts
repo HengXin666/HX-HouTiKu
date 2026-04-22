@@ -31,6 +31,10 @@ interface AuthState {
   setRecipientToken: (token: string, recipientId: string) => Promise<void>;
   reset: () => Promise<void>;
   setRememberPassword: (v: boolean) => Promise<void>;
+  /** Export all key data as JSON string (for clone transfer). */
+  exportBundle: () => Promise<string | null>;
+  /** Import key data from JSON string (from clone transfer). */
+  importBundle: (bundle: string, password: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -160,6 +164,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       recipientToken: null,
       deviceName: null,
       rememberPassword: false,
+    });
+  },
+
+  exportBundle: async () => {
+    const keyData = await getKeyData();
+    if (!keyData) return null;
+    return JSON.stringify(keyData);
+  },
+
+  importBundle: async (bundle: string, password: string) => {
+    const keyData = JSON.parse(bundle);
+
+    // Verify the password can decrypt the private key
+    const privateKeyHex = await unwrapPrivateKey(
+      keyData.wrappedPrivateKey as WrappedKey,
+      password
+    );
+
+    await saveKeyData(keyData);
+    await setPref(SAVED_PWD_KEY, password);
+
+    set({
+      status: "unlocked",
+      publicKeyHex: keyData.publicKeyHex,
+      privateKeyHex,
+      recipientToken: keyData.recipientToken ?? null,
+      deviceName: keyData.deviceName ?? null,
+      rememberPassword: true,
     });
   },
 }));

@@ -8,6 +8,7 @@ import { Feed } from "@/pages/Feed";
 import { GroupView } from "@/pages/GroupView";
 import { MessageDetail } from "@/pages/MessageDetail";
 import { Settings } from "@/pages/Settings";
+import { CloneDevice } from "@/pages/CloneDevice";
 import { AppShell } from "@/components/layout/AppShell";
 import { registerPushSubscription } from "@/lib/push";
 import { hasWebPush, isNativeAndroid } from "@/lib/platform";
@@ -65,6 +66,7 @@ function AppContent({ status }: { status: string }) {
     return (
       <Routes>
         <Route path="/setup" element={<SetupWizard />} />
+        <Route path="/clone" element={<CloneDevice />} />
         <Route path="*" element={<Navigate to="/setup" replace />} />
       </Routes>
     );
@@ -85,6 +87,7 @@ function AppContent({ status }: { status: string }) {
         <Route path="/groups/:groupName" element={<Feed />} />
         <Route path="/message/:id" element={<MessageDetail />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/clone" element={<CloneDevice />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

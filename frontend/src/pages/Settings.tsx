@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/Switch";
 import { Dialog } from "@/components/ui/Dialog";
 import { Toast } from "@/components/ui/Toast";
@@ -21,6 +22,7 @@ import {
   Fingerprint,
   Type,
   Send,
+  Share2,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -31,6 +33,7 @@ import { isNativePlatform, hasWebNotification, hasWebPush } from "@/lib/platform
 import { usePush } from "@/hooks/use-push";
 
 export function Settings() {
+  const navigate = useNavigate();
   const publicKeyHex = useAuthStore((s) => s.publicKeyHex);
   const deviceName = useAuthStore((s) => s.deviceName);
   const lock = useAuthStore((s) => s.lock);
@@ -372,6 +375,20 @@ export function Settings() {
               />
             </div>
           </div>
+
+          <button
+            onClick={() => navigate("/clone")}
+            className="settings-item settings-item--btn"
+          >
+            <div className="settings-item-icon settings-item-icon--amber">
+              <Share2 />
+            </div>
+            <div className="settings-item-body">
+              <div className="settings-item-label">设备克隆</div>
+              <div className="settings-item-desc">分享账号到其他设备，或从旧设备导入</div>
+            </div>
+            <ChevronRight className="settings-item-chevron" />
+          </button>
         </div>
       </div>
 

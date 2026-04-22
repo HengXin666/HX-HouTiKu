@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Toast } from "@/components/ui/Toast";
-import { Check, Copy, Clock, ArrowLeft } from "lucide-react";
+import { Dialog } from "@/components/ui/Dialog";
+import { Check, Copy, Clock, ArrowLeft, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
 import { PriorityBadge } from "@/components/message/PriorityBadge";
@@ -23,7 +24,10 @@ export function MessageDetail() {
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const messages = useMessageStore((s) => s.messages);
   const markRead = useMessageStore((s) => s.markRead);
+  const deleteMessage = useMessageStore((s) => s.deleteMessage);
   const [format, setFormat] = useState<ContentFormat>("auto");
+  const [deleteVisible, setDeleteVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const message = messages.find((m) => m.id === id);
 
@@ -147,7 +151,49 @@ export function MessageDetail() {
           <Copy style={{ width: 16, height: 16 }} />
           复制内容
         </button>
+        {recipientToken && (
+          <button
+            onClick={() => setDeleteVisible(true)}
+            className="msg-detail-action-btn"
+            style={{ color: "var(--color-destructive)" }}
+          >
+            <Trash2 style={{ width: 16, height: 16 }} />
+            删除
+          </button>
+        )}
       </div>
+
+      <Dialog
+        visible={deleteVisible}
+        content="确定永久删除此消息？此操作不可撤销。"
+        closeOnAction
+        onClose={() => setDeleteVisible(false)}
+        actions={[
+          [
+            { key: "cancel", text: "取消", onClick: () => setDeleteVisible(false) },
+            {
+              key: "delete",
+              text: deleting ? "删除中…" : "删除",
+              bold: true,
+              danger: true,
+              onClick: async () => {
+                if (!recipientToken) return;
+                setDeleting(true);
+                try {
+                  await deleteMessage(recipientToken, [message.id]);
+                  setDeleteVisible(false);
+                  Toast.show({ content: "消息已删除", position: "bottom" });
+                  navigate(-1);
+                } catch {
+                  Toast.show({ content: "删除失败", position: "bottom" });
+                } finally {
+                  setDeleting(false);
+                }
+              },
+            },
+          ],
+        ]}
+      />
     </div>
   );
 }

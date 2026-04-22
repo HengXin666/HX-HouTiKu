@@ -465,8 +465,7 @@ curl https://houtiku.api.woa.qzz.io/api/config
 ```json
 {
   "id": "uuid(可选, 不传则自动生成)",
-  "recipients": ["alice"],
-  "encrypted_payloads": {"alice": "base64密文"},
+  "encrypted_payloads": {"any_key": "base64密文"},
   "priority": "default",
   "content_type": "markdown",
   "group": "general",
@@ -476,15 +475,17 @@ curl https://houtiku.api.woa.qzz.io/api/config
 }
 ```
 
+> `encrypted_payloads` 只需提供一个 key-value 对。服务端取第一个值作为消息密文，存一份全局消息，然后通知所有活跃设备。所有设备共享同一把密钥（通过「设备克隆」同步），因此都能解密。
+
 **响应 201**:
 
 ```json
 {
   "status": "ok",
   "id": "uuid",
-  "pushed_to": ["alice"],
+  "pushed_to": ["alice", "bob"],
   "ws_sent": ["alice"],
-  "push_sent": ["alice"]
+  "push_sent": ["bob"]
 }
 ```
 
@@ -601,3 +602,23 @@ wss://houtiku.api.woa.qzz.io/api/ws?token=rt_xxx
 ```
 GET /api/image-proxy?url=https://i0.hdslb.com/xxx.jpg
 ```
+
+### 设备克隆
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|------|------|
+| `POST /api/clone/offer` | Body: `{encrypted_bundle}` | recipient_token | 旧设备上传加密密钥包, 返回 8 位配对码 (5 分钟有效) |
+| `POST /api/clone/claim` | Body: `{code}` | 无 | 新设备用配对码下载密钥包 (单次有效) |
+
+---
+
+## 消息存储模型
+
+消息采用**全局共享**模型:
+
+- SDK 推送时, 只需用任一 recipient 的公钥加密**一份**密文
+- 服务端存储一条全局消息记录, 不按 recipient 隔离
+- 所有设备通过「设备克隆」共享同一把 ECIES 密钥对, 因此都能解密
+- 新设备克隆后自动拥有完整历史消息
+
+仍然使用 **ECIES secp256k1 非对称加密**, 私钥永远不离开设备。

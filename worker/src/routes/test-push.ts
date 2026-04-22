@@ -1,11 +1,9 @@
 /**
  * POST /api/test-push — Test push endpoint.
  *
- * Accepts a **plaintext** message, encrypts it server-side for each target
- * recipient using their stored public key (ECIES secp256k1 via @noble/curves),
- * then delivers via the standard three-layer pipeline (DO WebSocket + Web Push + FCM).
- *
- * Admin-only — bypasses normal client-side encryption for testing.
+ * Accepts a **plaintext** message, encrypts it server-side using the first
+ * recipient's public key (ECIES secp256k1), stores ONE copy globally,
+ * then delivers to ALL active devices via WS + Push.
  */
 
 import { Hono } from "hono";
@@ -21,7 +19,6 @@ interface TestPushRequest {
   body: string;
   priority?: string;
   group?: string;
-  recipients?: string[];
   tags?: string[];
   channel_id?: string;
 }
@@ -30,19 +27,13 @@ const app = new Hono<{ Bindings: Env; Variables: { recipientId?: string } }>();
 
 // ── POST /self — Test push to yourself (Recipient Token auth) ──
 app.post("/self", authRecipientToken(), async (c) => {
-  const recipientId = c.get("recipientId");
-  if (!recipientId) {
-    return c.json({ error: "recipient_id required — check your Recipient Token" }, 400);
-  }
+  // Get any active recipient's public key for encryption
+  const anyRecipient = await c.env.DB.prepare(
+    "SELECT id, name, public_key FROM recipients WHERE is_active = 1 LIMIT 1"
+  ).first<RecipientRow>();
 
-  const recipient = await c.env.DB.prepare(
-    "SELECT id, name, public_key FROM recipients WHERE id = ? AND is_active = 1"
-  )
-    .bind(recipientId)
-    .first<RecipientRow>();
-
-  if (!recipient) {
-    return c.json({ error: "Recipient not found or inactive" }, 404);
+  if (!anyRecipient) {
+    return c.json({ error: "No active recipients found" }, 404);
   }
 
   const messageId = crypto.randomUUID();
@@ -56,38 +47,55 @@ app.post("/self", authRecipientToken(), async (c) => {
 
   let encryptedBase64: string;
   try {
-    encryptedBase64 = await eciesEncrypt(recipient.public_key, plainPayload);
+    encryptedBase64 = await eciesEncrypt(anyRecipient.public_key, plainPayload);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return c.json({ error: `Encryption failed: ${msg}` }, 500);
   }
 
+  // Store ONE global copy
   await c.env.DB.prepare(
     `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, channel_id, group_key, timestamp, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(messageId, recipient.id, encryptedBase64, "default", "markdown", "general", "default", "", timestamp, timestamp).run();
+  ).bind(messageId, "", encryptedBase64, "default", "markdown", "general", "default", "", timestamp, timestamp).run();
 
-  const delivery = await deliverToRecipient(c.env, recipient.id, {
+  // Deliver to ALL active recipients
+  const allRecipients = await c.env.DB.prepare(
+    "SELECT id, name FROM recipients WHERE is_active = 1"
+  ).all<RecipientRow>();
+
+  const pushedTo: string[] = [];
+  let anySent = false;
+  let anyPush = false;
+
+  const deliveryPayload = {
     id: messageId,
     encrypted_data: encryptedBase64,
-    priority: "default",
-    content_type: "markdown",
+    priority: "default" as const,
+    content_type: "markdown" as const,
     group: "general",
     timestamp,
     channel_id: "default",
     group_key: "",
-  });
+  };
+
+  for (const r of allRecipients.results) {
+    pushedTo.push(r.name);
+    const d = await deliverToRecipient(c.env, r.id, deliveryPayload);
+    if (d.ws_sent) anySent = true;
+    if (d.push_sent) anyPush = true;
+  }
 
   return c.json({
     status: "ok",
     id: messageId,
-    pushed_to: [recipient.name],
-    ws_sent: delivery.ws_sent,
-    push_sent: delivery.push_sent,
+    pushed_to: pushedTo,
+    ws_sent: anySent,
+    push_sent: anyPush,
   }, 201);
 });
 
-// ── POST / — Test push to all/specified recipients (Admin/API Token auth) ──
+// ── POST / — Test push to all (Admin/API Token auth) ──
 app.post("/", authPushToken(), async (c) => {
   const body = await c.req.json<TestPushRequest>();
 
@@ -107,73 +115,54 @@ app.post("/", authPushToken(), async (c) => {
     tags: body.tags ?? [],
   });
 
-  let targetNames = body.recipients;
-  if (!targetNames || targetNames.length === 0) {
-    const allRecipients = await c.env.DB.prepare(
-      "SELECT name FROM recipients WHERE is_active = 1"
-    ).all<RecipientRow>();
-    targetNames = allRecipients.results.map((r) => r.name);
-  }
+  // Get first active recipient's public key for encryption
+  const firstRecipient = await c.env.DB.prepare(
+    "SELECT id, name, public_key FROM recipients WHERE is_active = 1 LIMIT 1"
+  ).first<RecipientRow>();
 
-  if (targetNames.length === 0) {
+  if (!firstRecipient) {
     return c.json({ error: "No active recipients found" }, 404);
   }
+
+  let encryptedBase64: string;
+  try {
+    encryptedBase64 = await eciesEncrypt(firstRecipient.public_key, plainPayload);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Encryption failed: ${msg}`, encryption_errors: [msg] }, 500);
+  }
+
+  // Store ONE global copy
+  await c.env.DB.prepare(
+    `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, channel_id, group_key, timestamp, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(messageId, "", encryptedBase64, priority, "markdown", group, channelId, "", timestamp, timestamp).run();
+
+  // Deliver to ALL active recipients
+  const allRecipients = await c.env.DB.prepare(
+    "SELECT id, name FROM recipients WHERE is_active = 1"
+  ).all<RecipientRow>();
 
   const pushedTo: string[] = [];
   const wsSent: string[] = [];
   const pushSent: string[] = [];
-  const encryptionErrors: string[] = [];
-  const statements: D1PreparedStatement[] = [];
 
-  for (const name of targetNames) {
-    const recipient = await c.env.DB.prepare(
-      "SELECT id, public_key FROM recipients WHERE name = ? AND is_active = 1"
-    )
-      .bind(name)
-      .first<RecipientRow>();
+  const deliveryPayload = {
+    id: messageId,
+    encrypted_data: encryptedBase64,
+    priority,
+    content_type: "markdown" as const,
+    group,
+    timestamp,
+    channel_id: channelId,
+    group_key: "",
+  };
 
-    if (!recipient) {
-      encryptionErrors.push(`${name}: not found`);
-      continue;
-    }
-
-    let encryptedBase64: string;
-    try {
-      encryptedBase64 = await eciesEncrypt(recipient.public_key, plainPayload);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      encryptionErrors.push(`${name}: encryption failed — ${msg}`);
-      continue;
-    }
-
-    const msgId = targetNames.length === 1 ? messageId : `${messageId}_${name}`;
-
-    statements.push(
-      c.env.DB.prepare(
-        `INSERT INTO messages (id, recipient_id, encrypted_data, priority, content_type, group_name, channel_id, group_key, timestamp, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).bind(msgId, recipient.id, encryptedBase64, priority, "markdown", group, channelId, "", timestamp, timestamp)
-    );
-
-    pushedTo.push(name);
-
-    const delivery = await deliverToRecipient(c.env, recipient.id, {
-      id: msgId,
-      encrypted_data: encryptedBase64,
-      priority,
-      content_type: "markdown",
-      group,
-      timestamp,
-      channel_id: channelId,
-      group_key: "",
-    });
-
-    if (delivery.ws_sent) wsSent.push(name);
-    if (delivery.push_sent) pushSent.push(name);
-  }
-
-  if (statements.length > 0) {
-    await c.env.DB.batch(statements);
+  for (const r of allRecipients.results) {
+    pushedTo.push(r.name);
+    const d = await deliverToRecipient(c.env, r.id, deliveryPayload);
+    if (d.ws_sent) wsSent.push(r.name);
+    if (d.push_sent) pushSent.push(r.name);
   }
 
   return c.json({
@@ -182,7 +171,6 @@ app.post("/", authPushToken(), async (c) => {
     pushed_to: pushedTo,
     ws_sent: wsSent,
     push_sent: pushSent,
-    encryption_errors: encryptionErrors.length > 0 ? encryptionErrors : undefined,
   }, 201);
 });
 

@@ -4,21 +4,16 @@ import { authRecipientToken } from "../auth";
 
 const app = new Hono<{ Bindings: Env; Variables: { recipientId?: string } }>();
 
-// GET /api/messages — pull encrypted messages
+// GET /api/messages — pull encrypted messages (global, shared across all devices)
 app.get("/", authRecipientToken(), async (c) => {
-  const recipientId = c.get("recipientId");
-  if (!recipientId) {
-    return c.json({ error: "recipient_id required" }, 400);
-  }
-
   const since = Number(c.req.query("since") || "0");
   const limit = Math.min(Number(c.req.query("limit") || "50"), 200);
   const group = c.req.query("group");
   const priority = c.req.query("priority");
   const channelId = c.req.query("channel_id");
 
-  let query = "SELECT * FROM messages WHERE recipient_id = ? AND timestamp > ?";
-  const params: (string | number)[] = [recipientId, since];
+  let query = "SELECT * FROM messages WHERE timestamp > ?";
+  const params: (string | number)[] = [since];
 
   if (group) {
     query += " AND group_name = ?";
@@ -36,7 +31,7 @@ app.get("/", authRecipientToken(), async (c) => {
   }
 
   query += " ORDER BY timestamp DESC LIMIT ?";
-  params.push(limit + 1); // +1 to detect has_more
+  params.push(limit + 1);
 
   const stmt = c.env.DB.prepare(query);
   const result = await stmt.bind(...params).all<MessageRow>();
@@ -54,12 +49,9 @@ app.get("/", authRecipientToken(), async (c) => {
     is_read: row.is_read === 1,
   }));
 
-  // Count total unread
   const unreadResult = await c.env.DB.prepare(
-    "SELECT COUNT(*) as count FROM messages WHERE recipient_id = ? AND is_read = 0"
-  )
-    .bind(recipientId)
-    .first<{ count: number }>();
+    "SELECT COUNT(*) as count FROM messages WHERE is_read = 0"
+  ).first<{ count: number }>();
 
   return c.json({
     messages,
@@ -70,11 +62,6 @@ app.get("/", authRecipientToken(), async (c) => {
 
 // POST /api/messages/read — mark messages as read
 app.post("/read", authRecipientToken(), async (c) => {
-  const recipientId = c.get("recipientId");
-  if (!recipientId) {
-    return c.json({ error: "recipient_id required" }, 400);
-  }
-
   const { message_ids } = await c.req.json<{ message_ids: string[] }>();
 
   if (!message_ids || message_ids.length === 0) {
@@ -83,13 +70,29 @@ app.post("/read", authRecipientToken(), async (c) => {
 
   const statements = message_ids.map((id) =>
     c.env.DB.prepare(
-      "UPDATE messages SET is_read = 1 WHERE id = ? AND recipient_id = ?"
-    ).bind(id, recipientId)
+      "UPDATE messages SET is_read = 1 WHERE id = ?"
+    ).bind(id)
   );
 
   await c.env.DB.batch(statements);
 
   return c.json({ updated: message_ids.length });
+});
+
+// DELETE /api/messages — permanently delete messages
+app.delete("/", authRecipientToken(), async (c) => {
+  const { message_ids } = await c.req.json<{ message_ids: string[] }>();
+
+  if (!message_ids || message_ids.length === 0) {
+    return c.json({ error: "message_ids required" }, 400);
+  }
+
+  const placeholders = message_ids.map(() => "?").join(",");
+  await c.env.DB.prepare(
+    `DELETE FROM messages WHERE id IN (${placeholders})`
+  ).bind(...message_ids).run();
+
+  return c.json({ deleted: message_ids.length });
 });
 
 export default app;
