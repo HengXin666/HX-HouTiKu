@@ -11,4 +11,10 @@
     <string name="channel_low_desc">低优先级 — 无声音、无震动</string>
     <string name="channel_debug">调试</string>
     <string name="channel_debug_desc">调试消息 — 最低优先级</string>
+
+    <!-- WebSocket foreground service -->
+    <string name="channel_ws">WebSocket连接</string>
+    <string name="channel_ws_desc">保持后台消息推送连接，低功耗常驻</string>
+    <string name="ws_notification_title">实时消息服务运行中</string>
+    <string name="ws_notification_text">正在保持连接以接收新消息</string>
 </resources>

@@ -2,7 +2,10 @@ package com.hxhoutiku.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.ConnectivityManager
@@ -15,11 +18,12 @@ import android.view.WindowManager
 import android.webkit.*
 import android.widget.FrameLayout
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import com.google.firebase.messaging.FirebaseMessaging
+import com.hxhoutiku.app.service.HxWebSocketService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.tasks.await
 
@@ -34,7 +38,7 @@ import kotlinx.coroutines.tasks.await
  *   - getPlatform()          → returns "android"
  *   - getAppVersion()        → returns app version string
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -64,9 +68,18 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Must be called BEFORE super.onCreate() to prevent action bar flash
+        supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
+
         super.onCreate(savedInstanceState)
 
-        // Edge-to-edge
+        // Force hide the action bar / title bar (belt-and-suspenders approach)
+        supportActionBar?.hide()
+        // Also try the legacy path for edge cases
+        @Suppress("DEPRECATION")
+        this.requestWindowFeature(Window.FEATURE_NO_TITLE)
+
+        // Edge-to-edge: let content draw behind status/nav bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -86,14 +99,22 @@ class MainActivity : ComponentActivity() {
             // Keep the screen on when active
             keepScreenOn = false
 
-            // Fit system windows for edge-to-edge
-            fitsSystemWindows = true
+            // DO NOT set fitsSystemWindows — it conflicts with edge-to-edge mode
+            // and causes the status bar area to show app label background
+            // fitsSystemWindows = true  // REMOVED: causes title bar residue
+
+            // Use immersive flags to hide system bars cleanly
+            @Suppress("DEPRECATION")
             systemUiVisibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                     or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
         }
 
         setContentView(webView)
+
+        // Register for WebSocket service broadcasts
+        registerWsBroadcastReceiver()
 
         // WebView debugging only in debug builds
         if (BuildConfig.DEBUG) {
@@ -262,7 +283,82 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-apply immersive flags when returning to the app (system resets them)
+        hideSystemUI()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemUI()
+    }
+
+    /** Apply immersive sticky mode — hides status bar & nav bar until user swipes edge */
+    private fun hideSystemUI() {
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        or View.SYSTEM_UI_FLAG_FULLSCREEN)
+        // Also ensure action bar stays hidden
+        supportActionBar?.hide()
+    }
+
+    // ─── WebSocket Service Integration ─────────────────────────
+
+    /** BroadcastReceiver for messages from HxWebSocketService */
+    private val wsBroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val type = intent?.getStringExtra(HxWebSocketService.BROADCAST_EXTRA_TYPE) ?: return
+            val data = intent.getStringExtra(HxWebSocketService.BROADCAST_EXTRA_DATA) ?: "{}"
+
+            when (type) {
+                HxWebSocketService.MSG_WS_MESSAGE -> {
+                    // Forward to WebView JS — escape single quotes to prevent injection
+                    val escaped = data.replace("'", "\\'")
+                    webView.evaluateJavascript(
+                        "window.__hxNativeWsMessage && window.__hxNativeWsMessage('$escaped')",
+                        null
+                    )
+                }
+                HxWebSocketService.MSG_WS_CONNECTED -> {
+                    webView.evaluateJavascript(
+                        "window.__hxNativeWsStatus && window.__hxNativeWsStatus('connected')",
+                        null
+                    )
+                }
+                HxWebSocketService.MSG_WS_DISCONNECTED -> {
+                    webView.evaluateJavascript(
+                        "window.__hxNativeWsStatus && window.__hxNativeWsStatus('disconnected')",
+                        null
+                    )
+                }
+                HxWebSocketService.MSG_WS_ERROR -> {
+                    webView.evaluateJavascript(
+                        "window.__hxNativeWsStatus && window.__hxNativeWsStatus('error')",
+                        null
+                    )
+                }
+            }
+        }
+    }
+
+    private fun registerWsBroadcastReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(HxWebSocketService.ACTION_WS_BROADCAST)
+        }
+        registerReceiver(wsBroadcastReceiver, filter, RECEIVER_NOT_EXPORTED)
+    }
+
     override fun onDestroy() {
+        // Unregister broadcast receiver
+        try {
+            unregisterReceiver(wsBroadcastReceiver)
+        } catch (_: Exception) { /* not registered */ }
         scope.cancel()
         webView.destroy()
         super.onDestroy()
@@ -392,6 +488,40 @@ class MainActivity : ComponentActivity() {
             runOnUiThread {
                 Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
             }
+        }
+
+        /**
+         * Start the WebSocket foreground service for persistent background push.
+         *
+         * This replaces FCM as the primary push channel when FCM is unavailable (e.g. China).
+         * The service uses a Foreground Service with dataSync type to stay alive.
+         *
+         * @param wsUrl Full WebSocket URL, e.g. "wss://your-worker.dev/api/ws"
+         * @param token Recipient auth token
+         * @param recipientId Recipient ID (derived from token)
+         */
+        @JavascriptInterface
+        fun startWebSocket(wsUrl: String, token: String, recipientId: String) {
+            Log.d("HxBridge", "Starting WS service: url=$wsUrl recipient=$recipientId")
+            HxWebSocketService.start(
+                this@MainActivity,
+                wsUrl,
+                token,
+                recipientId
+            )
+        }
+
+        /** Stop the WebSocket foreground service */
+        @JavascriptInterface
+        fun stopWebSocket() {
+            Log.d("HxBridge", "Stopping WS service")
+            HxWebSocketService.stop(this@MainActivity)
+        }
+
+        /** Update credentials without restarting the connection */
+        @JavascriptInterface
+        fun updateWsCredentials(token: String, recipientId: String) {
+            HxWebSocketService.updateCredentials(this@MainActivity, token, recipientId)
         }
     }
 }

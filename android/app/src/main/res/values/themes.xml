@@ -1,13 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.HxHouTiKu" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- Base theme: NoActionBar + dark base for WebView hybrid app -->
+    <style name="Theme.HxHouTiKu" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
     </style>
 
+    <!-- Splash theme — must also be NoActionBar to prevent title flash -->
     <style name="Theme.HxHouTiKu.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
         <item name="postSplashScreenTheme">@style/Theme.HxHouTiKu</item>
+        <!-- Force no action bar during splash transition -->
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

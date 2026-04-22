@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Foreground Service: required on Android 14+ (API 34) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- foregroundServiceType = "dataSync": required on Android 14+ for data-sync FGS -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
@@ -42,6 +46,18 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- WebSocket Foreground Service — keeps persistent WS connection for background push -->
+        <service
+            android:name=".service.HxWebSocketService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync">
+            <intent-filter>
+                <action android:name="com.hxhoutiku.app.ws.START" />
+                <action android:name="com.hxhoutiku.app.ws.STOP" />
+                <action android:name="com.hxhoutiku.app.ws.UPDATE_CREDS" />
             </intent-filter>
         </service>
 

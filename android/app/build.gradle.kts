@@ -93,8 +93,12 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.fragment)
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.splash.screen)
     implementation(libs.androidx.webkit)
+
+    // Network — WebSocket client for background push
+    implementation(libs.okhttp)
 
     // Firebase
     implementation(platform(libs.firebase.bom))
