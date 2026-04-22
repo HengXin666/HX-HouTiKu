@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.Window
 import android.view.WindowManager
 import android.webkit.*
 import android.widget.FrameLayout
@@ -73,11 +74,8 @@ class MainActivity : AppCompatActivity() {
 
         super.onCreate(savedInstanceState)
 
-        // Force hide the action bar / title bar (belt-and-suspenders approach)
+        // Force hide the action bar / title bar
         supportActionBar?.hide()
-        // Also try the legacy path for edge cases
-        @Suppress("DEPRECATION")
-        this.requestWindowFeature(Window.FEATURE_NO_TITLE)
 
         // Edge-to-edge: let content draw behind status/nav bars
         WindowCompat.setDecorFitsSystemWindows(window, false)

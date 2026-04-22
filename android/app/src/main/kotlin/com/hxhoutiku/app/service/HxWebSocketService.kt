@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.hxhoutiku.app.HxApp
 import com.hxhoutiku.app.R
 import okhttp3.*
 import okio.ByteString
@@ -71,6 +70,13 @@ class HxWebSocketService : Service() {
         const val BROADCAST_EXTRA_TYPE = "type"
         const val BROADCAST_EXTRA_DATA = "data"
 
+        @Volatile
+        private var onMessageListener: WsMessageListener? = null
+
+        fun setMessageListener(listener: WsMessageListener?) {
+            onMessageListener = listener
+        }
+
         /**
          * Start the WebSocket foreground service.
          */
@@ -109,6 +115,11 @@ class HxWebSocketService : Service() {
             }
             context.startService(intent)
         }
+    }
+
+    /** In-process callback for when the Activity is in foreground */
+    interface WsMessageListener {
+        fun onWsMessage(type: String, data: String)
     }
 
     // ─── Service Lifecycle ──────────────────────────────────────
@@ -234,8 +245,7 @@ class HxWebSocketService : Service() {
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            // Binary messages not expected but handle gracefully
-            Log.d(TAG, "WS binary message: ${bytes.size()} bytes")
+            Log.d(TAG, "WS binary message: ${bytes.size} bytes")
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -265,18 +275,15 @@ class HxWebSocketService : Service() {
     private fun schedulePing() {
         cancelPing()
         pingHandler?.postDelayed({
-            webSocket?.let { ws ->
-                if (it != null) {
-                    try {
-                        // Send application-level ping (JSON, server echoes)
-                        ws.send("""{"type":"ping","ts":${System.currentTimeMillis()}}""")
-                        Log.d(TAG, "Ping sent")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Ping failed", e)
-                    }
+            val ws = webSocket
+            if (ws != null) {
+                try {
+                    ws.send("""{"type":"ping","ts":${System.currentTimeMillis()}}""")
+                    Log.d(TAG, "Ping sent")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Ping failed", e)
                 }
             }
-            // Schedule next ping regardless of send result
             schedulePing()
         }, PING_INTERVAL_MS)
     }
@@ -304,8 +311,6 @@ class HxWebSocketService : Service() {
     }
 
     private fun startForegroundNotification() {
-        // "Silent" notification required by Android for foreground service
-        // Uses LOW importance so it doesn't make sound or appear in heads-up
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.ws_notification_title))
             .setContentText(getString(R.string.ws_notification_text))
@@ -320,10 +325,6 @@ class HxWebSocketService : Service() {
 
     // ─── Message Delivery ───────────────────────────────────────
 
-    /**
-     * Broadcast message via LocalBroadcastManager pattern.
-     * The MainActivity registers a receiver and forwards to WebView JS.
-     */
     private fun broadcast(type: String, data: String) {
         val intent = Intent(ACTION_WS_BROADCAST).apply {
             putExtra(BROADCAST_EXTRA_TYPE, type)
@@ -331,21 +332,6 @@ class HxWebSocketService : Service() {
         }
         sendBroadcast(intent)
 
-        // Also dispatch to any registered in-process listener
         onMessageListener?.onWsMessage(type, data)
-    }
-
-    /** In-process callback for when the Activity is in foreground */
-    interface WsMessageListener {
-        fun onWsMessage(type: String, data: String)
-    }
-
-    companion object {
-        @Volatile
-        private var onMessageListener: WsMessageListener? = null
-
-        fun setMessageListener(listener: WsMessageListener?) {
-            onMessageListener = listener
-        }
     }
 }
