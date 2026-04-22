@@ -21,13 +21,12 @@ import {
   Smartphone,
   Fingerprint,
   Type,
-  Send,
   Share2,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import { resetAll, clearMessages, setPref, getPref } from "@/lib/db";
-import { invalidateApiBaseCache, sendTestPush, sendTestPushSelf, ApiError } from "@/lib/api";
+import { resetAll, clearMessages } from "@/lib/db";
+import { invalidateApiBaseCache } from "@/lib/api";
 import { copyToClipboard } from "@/lib/utils";
 import { isNativePlatform, hasWebNotification, hasWebPush } from "@/lib/platform";
 import { usePush } from "@/hooks/use-push";
@@ -62,101 +61,6 @@ export function Settings() {
   const [clearCacheVisible, setClearCacheVisible] = useState(false);
   const [resetVisible, setResetVisible] = useState(false);
   const [resetConfirmVisible, setResetConfirmVisible] = useState(false);
-
-  // Test push states
-  const [testPushDialogVisible, setTestPushDialogVisible] = useState(false);
-  const [adminTokenInput, setAdminTokenInput] = useState("");
-  const [testPushSending, setTestPushSending] = useState(false);
-  const [adminTokenLoaded, setAdminTokenLoaded] = useState(false);
-  const [selfPushSending, setSelfPushSending] = useState(false);
-
-  // Push to self — uses Recipient Token, no Admin Token needed
-  const handleSelfPush = useCallback(async () => {
-    if (!recipientToken) {
-      Toast.show({ content: "请先配置 Recipient Token", position: "bottom" });
-      return;
-    }
-
-    setSelfPushSending(true);
-    try {
-      const result = await sendTestPushSelf(recipientToken);
-      if (result.push_sent) {
-        Toast.show({
-          content: `推送成功！已发送到 ${result.pushed_to.join(", ")}`,
-          position: "bottom",
-          duration: 3000,
-        });
-      } else {
-        Toast.show({
-          content: "消息已存储，但没有找到推送订阅（请先开启消息推送）",
-          position: "bottom",
-          duration: 3000,
-        });
-      }
-    } catch (err) {
-      const msg = err instanceof ApiError
-        ? err.status === 401
-          ? "Recipient Token 无效，请检查后重试"
-          : err.message
-        : "发送失败，请检查网络";
-      Toast.show({ content: msg, position: "bottom", duration: 3000 });
-    } finally {
-      setSelfPushSending(false);
-    }
-  }, [recipientToken]);
-
-  // Load saved admin token on first dialog open
-  const openTestPushDialog = useCallback(async () => {
-    if (!adminTokenLoaded) {
-      const saved = await getPref<string>("adminToken");
-      if (saved) setAdminTokenInput(saved);
-      setAdminTokenLoaded(true);
-    }
-    setTestPushDialogVisible(true);
-  }, [adminTokenLoaded]);
-
-  const handleTestPush = useCallback(async () => {
-    const token = adminTokenInput.trim();
-    if (!token) {
-      Toast.show({ content: "请输入 Admin Token", position: "bottom" });
-      return;
-    }
-
-    setTestPushSending(true);
-    try {
-      // Save the admin token for future use
-      await setPref("adminToken", token);
-
-      const result = await sendTestPush(token, {
-        title: "🔔 测试推送",
-        body: "恭喜！推送管道工作正常 ✅",
-      });
-
-      setTestPushDialogVisible(false);
-
-      if (result.pushed_to.length > 0) {
-        Toast.show({
-          content: `推送成功！已发送到 ${result.pushed_to.join(", ")}`,
-          position: "bottom",
-          duration: 3000,
-        });
-      } else {
-        Toast.show({
-          content: "没有找到活跃的接收设备",
-          position: "bottom",
-        });
-      }
-    } catch (err) {
-      const msg = err instanceof ApiError
-        ? err.status === 401
-          ? "Admin Token 无效，请检查后重试"
-          : err.message
-        : "发送失败，请检查网络";
-      Toast.show({ content: msg, position: "bottom", duration: 3000 });
-    } finally {
-      setTestPushSending(false);
-    }
-  }, [adminTokenInput]);
 
   const handleCopyKey = async () => {
     if (!publicKeyHex) return;
@@ -502,43 +406,6 @@ export function Settings() {
               )}
             </div>
           </div>
-
-          <button
-            onClick={handleSelfPush}
-            disabled={selfPushSending || !recipientToken}
-            className="settings-item settings-item--btn"
-          >
-            <div className="settings-item-icon settings-item-icon--green">
-              <Send />
-            </div>
-            <div className="settings-item-body">
-              <div className="settings-item-label">
-                {selfPushSending ? "发送中…" : "推送给自己"}
-              </div>
-              <div className="settings-item-desc">
-                {recipientToken
-                  ? "使用 Recipient Token 向当前设备发送测试推送"
-                  : "需要先配置 Recipient Token"}
-              </div>
-            </div>
-            <ChevronRight className="settings-item-chevron" />
-          </button>
-
-          <button
-            onClick={openTestPushDialog}
-            className="settings-item settings-item--btn"
-          >
-            <div className="settings-item-icon settings-item-icon--slate">
-              <Send />
-            </div>
-            <div className="settings-item-body">
-              <div className="settings-item-label">推送给所有设备</div>
-              <div className="settings-item-desc">
-                需要 Admin Token，向所有活跃设备推送测试消息
-              </div>
-            </div>
-            <ChevronRight className="settings-item-chevron" />
-          </button>
         </div>
         <div className="settings-group-footer">
           urgent → 持续震动 · high → 震动 · default → 静默 · low/debug → 不推送
@@ -639,44 +506,6 @@ export function Settings() {
         ]}
       />
 
-      {/* Test Push Dialog */}
-      <Dialog
-        visible={testPushDialogVisible}
-        onClose={() => setTestPushDialogVisible(false)}
-        content={
-          <div className="test-push-dialog">
-            <div className="test-push-dialog-title">发送测试推送</div>
-            <p className="test-push-dialog-desc">
-              输入 Admin Token 后，服务端将向所有活跃设备推送一条测试消息。
-            </p>
-            <input
-              type="password"
-              value={adminTokenInput}
-              onChange={(e) => setAdminTokenInput(e.target.value)}
-              placeholder="输入 Admin Token"
-              className="settings-field-input"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !testPushSending) handleTestPush();
-              }}
-            />
-            <div className="test-push-dialog-hint">
-              即部署时设置的 ADMIN_TOKEN，Token 会保存在本地
-            </div>
-          </div>
-        }
-        actions={[
-          [
-            { key: "cancel", text: "取消", onClick: () => setTestPushDialogVisible(false) },
-            {
-              key: "send",
-              text: testPushSending ? "发送中…" : "发送",
-              bold: true,
-              onClick: handleTestPush,
-            },
-          ],
-        ]}
-      />
     </div>
   );
 }

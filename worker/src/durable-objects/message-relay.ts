@@ -103,12 +103,15 @@ export class MessageRelay implements DurableObject {
     // Store metadata in websocket's attachment
     (server as any).serializeAttachment(meta);
 
-    // Send connection confirmation
+    // Send connection confirmation to ALL connected sockets (including the new one)
     const sockets = this.state.getWebSockets();
-    server.send(JSON.stringify({
+    const countMsg = JSON.stringify({
       type: "connected",
       device_count: sockets.length,
-    } satisfies ServerMessage));
+    } satisfies ServerMessage);
+    for (const s of sockets) {
+      try { s.send(countMsg); } catch { /* dead socket */ }
+    }
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -170,8 +173,20 @@ export class MessageRelay implements DurableObject {
    * Called when a WebSocket is closed (by client or network).
    */
   async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
-    // Hibernation API handles cleanup automatically
+    // Close the socket
     ws.close(code, reason);
+
+    // Broadcast updated device count to remaining sockets
+    const sockets = this.state.getWebSockets();
+    if (sockets.length > 0) {
+      const countMsg = JSON.stringify({
+        type: "connected",
+        device_count: sockets.length,
+      } satisfies ServerMessage);
+      for (const s of sockets) {
+        try { s.send(countMsg); } catch { /* dead socket */ }
+      }
+    }
   }
 
   /**

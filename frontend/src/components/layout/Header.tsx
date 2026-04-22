@@ -23,7 +23,8 @@ export function Header() {
 
   const isDetail =
     location.pathname.startsWith("/message/") ||
-    location.pathname.startsWith("/groups/");
+    location.pathname.startsWith("/groups/") ||
+    location.pathname.startsWith("/clone");
   const isGroupDetail = location.pathname.startsWith("/groups/") && location.pathname !== "/groups";
 
   let title = TITLES[location.pathname] ?? "";
@@ -32,6 +33,9 @@ export function Header() {
   }
   if (location.pathname.startsWith("/message/")) {
     title = "消息详情";
+  }
+  if (location.pathname.startsWith("/clone")) {
+    title = "设备克隆";
   }
 
   return (
