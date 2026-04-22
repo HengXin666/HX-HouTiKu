@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
+import { cn } from "@/lib/utils";
 
 const TITLES: Record<string, string> = {
   "/": "信息流",
@@ -25,7 +26,6 @@ export function Header() {
     location.pathname.startsWith("/groups/");
   const isGroupDetail = location.pathname.startsWith("/groups/") && location.pathname !== "/groups";
 
-  // Derive title
   let title = TITLES[location.pathname] ?? "";
   if (isGroupDetail) {
     title = decodeURIComponent(location.pathname.split("/groups/")[1] ?? "分组");
@@ -35,7 +35,7 @@ export function Header() {
   }
 
   return (
-    <header className="app-header">
+    <header className={cn("app-header", !isDetail && "app-header--hide-mobile")}>
       <div className="app-header-inner">
         <div className="app-header-left">
           {isDetail ? (

@@ -97,9 +97,12 @@ function AppContent({ status }: { status: string }) {
 function SplashScreen() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background">
-      <div className="animate-pulse text-center">
-        <div className="text-4xl mb-4">🔐</div>
-        <p className="text-muted-foreground text-sm">加载中...</p>
+      <div className="text-center">
+        <div className="splash-loader">
+          <div className="splash-loader-ring" />
+          <div className="splash-loader-icon">🔐</div>
+        </div>
+        <p className="text-muted-foreground text-sm mt-6 animate-pulse">正在加载...</p>
       </div>
     </div>
   );

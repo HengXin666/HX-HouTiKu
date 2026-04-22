@@ -95,3 +95,11 @@ CREATE TABLE IF NOT EXISTS rate_limit_hits (
     hit_count INTEGER NOT NULL DEFAULT 0,
     window_start INTEGER NOT NULL
 );
+
+-- 7. Clone Offers (temporary encrypted key bundles for device cloning)
+CREATE TABLE IF NOT EXISTS clone_offers (
+    code TEXT PRIMARY KEY,
+    encrypted_bundle TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    claimed INTEGER DEFAULT 0
+);

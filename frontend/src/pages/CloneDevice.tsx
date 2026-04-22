@@ -5,11 +5,11 @@
  *   /clone          → choose share or import
  *   /clone?code=XXX → auto-enter import mode with pre-filled code
  *
- * Share flow: export keyData → upload to /api/clone/offer → show 6-digit code
- * Import flow: enter code → /api/clone/claim → decrypt with password → save
+ * Share flow: export keyData → upload to /api/clone/offer → show 8-char code + QR
+ * Import flow: scan QR / enter code → /api/clone/claim → decrypt with password → save
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Smartphone,
@@ -20,9 +20,12 @@ import {
   ArrowLeft,
   Loader2,
   ShieldCheck,
+  ScanLine,
+  X,
+  Camera,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
-import { cloneOffer, cloneClaim } from "@/lib/api";
+import { cloneOffer, cloneClaim, cloneCancel } from "@/lib/api";
 import { Toast } from "@/components/ui/Toast";
 import { copyToClipboard, cn } from "@/lib/utils";
 
@@ -79,7 +82,7 @@ function ChooseMode({ onSelect }: { onSelect: (m: Mode) => void }) {
               </div>
               <div>
                 <div className="settings-item-label">分享到其他设备</div>
-                <div className="settings-item-desc">生成配对码，让新设备导入你的账号</div>
+                <div className="settings-item-desc">生成配对码 + 二维码，让新设备扫码导入</div>
               </div>
             </div>
           </button>
@@ -96,7 +99,7 @@ function ChooseMode({ onSelect }: { onSelect: (m: Mode) => void }) {
             </div>
             <div>
               <div className="settings-item-label">从其他设备导入</div>
-              <div className="settings-item-desc">输入配对码，从旧设备克隆账号</div>
+              <div className="settings-item-desc">扫码或输入配对码，从旧设备克隆账号</div>
             </div>
           </div>
         </button>
@@ -115,6 +118,18 @@ function ShareMode() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const codeRef = useRef("");
+
+  // Cancel the offer when leaving the share page
+  useEffect(() => {
+    return () => {
+      if (codeRef.current && recipientToken) {
+        cloneCancel(recipientToken, codeRef.current).catch(() => {});
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const generate = async () => {
     if (!recipientToken) {
@@ -133,7 +148,11 @@ function ShareMode() {
 
       const result = await cloneOffer(recipientToken, bundle);
       setCode(result.code);
+      codeRef.current = result.code;
       setExpiresIn(result.expires_in_seconds);
+      // Generate QR code URL encoding the clone deep link
+      const qrContent = `houtiku://clone?code=${result.code}`;
+      setQrDataUrl(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrContent)}&bgcolor=FFFFFF&color=000000&margin=8`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "生成配对码失败");
     } finally {
@@ -164,7 +183,7 @@ function ShareMode() {
         <Upload style={{ width: 48, height: 48, margin: "0 auto 1rem", color: "var(--color-primary)" }} />
         <h2 className="setup-step-title">分享账号</h2>
         <p className="setup-step-desc" style={{ marginBottom: "1.5rem" }}>
-          生成一个 8 位配对码，在新设备上输入即可克隆账号。<br />
+          生成配对码和二维码，在新设备上扫码或输入即可克隆账号。<br />
           配对码 5 分钟有效，仅可使用一次。
         </p>
         {error && <p style={{ color: "var(--color-destructive)", fontSize: "0.875rem", marginBottom: "1rem" }}>{error}</p>}
@@ -183,15 +202,37 @@ function ShareMode() {
     <div style={{ textAlign: "center" }}>
       <ShieldCheck style={{ width: 48, height: 48, margin: "0 auto 1rem", color: "var(--color-priority-low)" }} />
       <h2 className="setup-step-title">配对码</h2>
-      <p className="setup-step-desc">在新设备上输入以下配对码</p>
+      <p className="setup-step-desc">在新设备上扫描二维码或输入配对码</p>
+
+      {/* QR Code */}
+      {qrDataUrl && (
+        <div style={{
+          display: "flex",
+          justifyContent: "center",
+          margin: "1.5rem 0 1rem",
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: 12,
+            padding: 12,
+            display: "inline-block",
+          }}>
+            <img
+              src={qrDataUrl}
+              alt="配对码二维码"
+              style={{ width: 180, height: 180, display: "block" }}
+            />
+          </div>
+        </div>
+      )}
 
       <div style={{
-        fontSize: "3rem",
+        fontSize: "2.5rem",
         fontWeight: 800,
         letterSpacing: "0.3em",
         fontFamily: "ui-monospace, monospace",
         color: "var(--color-foreground)",
-        margin: "1.5rem 0",
+        margin: "1rem 0",
         userSelect: "all",
       }}>
         {code.slice(0, 4)} {code.slice(4)}
@@ -217,6 +258,121 @@ function ShareMode() {
   );
 }
 
+// ─── QR Scanner ──────────────────────────────────────────
+
+function QrScanner({ onScan, onClose }: { onScan: (code: string) => void; onClose: () => void }) {
+  const scannerRef = useRef<HTMLDivElement>(null);
+  const html5QrRef = useRef<any>(null);
+  const [error, setError] = useState("");
+
+  const stopScanner = useCallback(async () => {
+    if (html5QrRef.current) {
+      try {
+        await html5QrRef.current.stop();
+      } catch { /* ignore */ }
+      try {
+        html5QrRef.current.clear();
+      } catch { /* ignore */ }
+      html5QrRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function startScanner() {
+      try {
+        const { Html5Qrcode } = await import("html5-qrcode");
+        if (cancelled || !scannerRef.current) return;
+
+        const scanner = new Html5Qrcode("qr-scanner-viewport");
+        html5QrRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1,
+          },
+          (decodedText) => {
+            // Parse houtiku://clone?code=XXXXXXXX or just an 8-char code
+            let code = "";
+            try {
+              const url = new URL(decodedText);
+              code = url.searchParams.get("code") ?? "";
+            } catch {
+              // Maybe it's just the raw code
+              code = decodedText.replace(/\s/g, "").toUpperCase();
+            }
+
+            if (code && /^[A-Z0-9]{8}$/.test(code)) {
+              stopScanner();
+              onScan(code);
+            }
+          },
+          () => { /* ignore scan failure frames */ }
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message.includes("NotAllowed")
+                ? "摄像头权限被拒绝，请在浏览器设置中允许摄像头访问"
+                : err.message
+              : "无法启动摄像头"
+          );
+        }
+      }
+    }
+
+    startScanner();
+
+    return () => {
+      cancelled = true;
+      stopScanner();
+    };
+  }, [onScan, stopScanner]);
+
+  return (
+    <div className="qr-scanner-container">
+      <div className="qr-scanner-header">
+        <button
+          onClick={() => { stopScanner(); onClose(); }}
+          className="msg-detail-action-btn"
+          style={{ padding: "0.25rem" }}
+        >
+          <X style={{ width: 20, height: 20 }} />
+        </button>
+        <h2>扫描配对码</h2>
+      </div>
+
+      <div className="qr-scanner-viewport">
+        {error ? (
+          <div style={{ padding: "2rem", textAlign: "center" }}>
+            <Camera style={{ width: 48, height: 48, margin: "0 auto 1rem", color: "var(--color-destructive)" }} />
+            <p style={{ color: "var(--color-destructive)", marginBottom: "1rem" }}>{error}</p>
+            <button
+              onClick={() => { stopScanner(); onClose(); }}
+              className="setup-btn setup-btn--primary"
+            >
+              返回手动输入
+            </button>
+          </div>
+        ) : (
+          <div id="qr-scanner-viewport" style={{ width: "100%", height: "100%" }} ref={scannerRef} />
+        )}
+      </div>
+
+      {!error && (
+        <div className="qr-scanner-hint">
+          将旧设备上的配对二维码放入取景框中
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Import Mode ──────────────────────────────────────────
 
 function ImportMode({ preCode }: { preCode: string }) {
@@ -229,6 +385,7 @@ function ImportMode({ preCode }: { preCode: string }) {
   const [bundle, setBundle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [scanning, setScanning] = useState(false);
 
   // If we have a pre-filled code, auto-claim
   useEffect(() => {
@@ -262,6 +419,12 @@ function ImportMode({ preCode }: { preCode: string }) {
     claimBundle(c);
   };
 
+  const handleScanResult = (scannedCode: string) => {
+    setScanning(false);
+    setCode(scannedCode);
+    claimBundle(scannedCode);
+  };
+
   const handlePasswordSubmit = async () => {
     if (!password) {
       setError("请输入主密码");
@@ -279,6 +442,10 @@ function ImportMode({ preCode }: { preCode: string }) {
       setLoading(false);
     }
   };
+
+  if (scanning) {
+    return <QrScanner onScan={handleScanResult} onClose={() => setScanning(false)} />;
+  }
 
   if (step === "done") {
     return (
@@ -330,7 +497,7 @@ function ImportMode({ preCode }: { preCode: string }) {
           </>
         )}
         {!bundle && loading && (
-          <Loader2 style={{ width: 32, height: 32, margin: "1rem auto", animation: "spin 1s linear infinite", color: "var(--color-primary)" }} />
+          <Loader2 style={{ width: 32, height: 32, margin: "1rem auto", animation: "splash-spin 1s linear infinite", color: "var(--color-primary)" }} />
         )}
       </div>
     );
@@ -340,10 +507,38 @@ function ImportMode({ preCode }: { preCode: string }) {
   return (
     <div style={{ textAlign: "center" }}>
       <Download style={{ width: 48, height: 48, margin: "0 auto 1rem", color: "var(--color-primary)" }} />
-      <h2 className="setup-step-title">输入配对码</h2>
+      <h2 className="setup-step-title">导入账号</h2>
       <p className="setup-step-desc" style={{ marginBottom: "1.5rem" }}>
-        在旧设备上点击「分享到其他设备」获取 8 位配对码
+        扫描旧设备上的二维码，或手动输入 8 位配对码
       </p>
+
+      {/* Scan QR button */}
+      <button
+        onClick={() => setScanning(true)}
+        className="setup-btn setup-btn--primary"
+        style={{
+          marginBottom: "1.5rem",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.5rem",
+        }}
+      >
+        <ScanLine style={{ width: 20, height: 20 }} />
+        扫一扫
+      </button>
+
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        margin: "0 0 1.5rem",
+        color: "var(--color-muted-foreground)",
+        fontSize: "0.8125rem",
+      }}>
+        <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
+        或手动输入
+        <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
+      </div>
 
       <input
         type="text"
@@ -359,7 +554,6 @@ function ImportMode({ preCode }: { preCode: string }) {
           letterSpacing: "0.2em",
           fontFamily: "ui-monospace, monospace",
         }}
-        autoFocus
         maxLength={8}
         onKeyDown={(e) => { if (e.key === "Enter" && !loading) handleCodeSubmit(); }}
       />
@@ -375,3 +569,5 @@ function ImportMode({ preCode }: { preCode: string }) {
     </div>
   );
 }
+
+

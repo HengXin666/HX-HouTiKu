@@ -252,3 +252,14 @@ export function cloneClaim(
     body: JSON.stringify({ code }),
   });
 }
+
+export function cloneCancel(
+  token: string,
+  code: string,
+): Promise<{ ok: boolean }> {
+  return request("/api/clone/cancel", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ code }),
+  });
+}

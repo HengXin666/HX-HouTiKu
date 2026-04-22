@@ -3,14 +3,12 @@
  *
  * Flow:
  *   1. Old device: POST /api/clone/offer  { encrypted_bundle }
- *      → Returns { code: "123456", expires_at }
- *   2. New device: POST /api/clone/claim  { code: "123456" }
+ *      → Returns { code: "ABCD1234", expires_at }
+ *   2. New device: POST /api/clone/claim  { code: "ABCD1234" }
  *      → Returns { encrypted_bundle }
  *   3. New device decrypts bundle locally using master password
  *
- * The bundle is encrypted by the old device before upload (AES-GCM with
- * master password), so the server never sees plaintext keys.
- *
+ * Storage: D1 table `clone_offers` (persistent across isolates).
  * Codes expire after 5 minutes and are single-use.
  */
 
@@ -20,33 +18,14 @@ import { authRecipientToken } from "../auth";
 
 const app = new Hono<{ Bindings: Env; Variables: { recipientId?: string } }>();
 
-// In-memory store for pending clone offers (lives in Worker isolate).
-// For production with multiple isolates, use KV or D1. This is fine for
-// single-user self-hosted use.
-interface CloneOffer {
-  encrypted_bundle: string;
-  expires_at: number;
-  claimed: boolean;
-}
-
-const pendingOffers = new Map<string, CloneOffer>();
-
-const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 无 I/O/0/1 避免混淆
+const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1
+const EXPIRE_MS = 5 * 60_000; // 5 minutes
 
 function generateCode(): string {
   const arr = new Uint8Array(8);
   crypto.getRandomValues(arr);
   return Array.from(arr, (b) => CHARSET[b % CHARSET.length]).join("");
 }
-
-function cleanExpired() {
-  const now = Date.now();
-  for (const [code, offer] of pendingOffers) {
-    if (offer.expires_at < now) pendingOffers.delete(code);
-  }
-}
-
-const EXPIRE_MS = 5 * 60_000; // 5 minutes
 
 // ── POST /offer — Old device uploads encrypted key bundle ──
 app.post("/offer", authRecipientToken(), async (c) => {
@@ -56,23 +35,28 @@ app.post("/offer", authRecipientToken(), async (c) => {
     return c.json({ error: "encrypted_bundle is required" }, 400);
   }
 
-  cleanExpired();
+  // Clean expired offers
+  await c.env.DB.prepare(
+    "DELETE FROM clone_offers WHERE expires_at < ?"
+  ).bind(Date.now()).run();
 
-  // Generate unique 6-digit code
+  // Generate unique 8-char code
   let code: string;
   let attempts = 0;
   do {
     code = generateCode();
     attempts++;
-  } while (pendingOffers.has(code) && attempts < 20);
+    const existing = await c.env.DB.prepare(
+      "SELECT code FROM clone_offers WHERE code = ?"
+    ).bind(code).first();
+    if (!existing) break;
+  } while (attempts < 20);
 
   const expiresAt = Date.now() + EXPIRE_MS;
 
-  pendingOffers.set(code, {
-    encrypted_bundle,
-    expires_at: expiresAt,
-    claimed: false,
-  });
+  await c.env.DB.prepare(
+    "INSERT INTO clone_offers (code, encrypted_bundle, expires_at, claimed) VALUES (?, ?, ?, 0)"
+  ).bind(code, encrypted_bundle, expiresAt).run();
 
   return c.json({
     code,
@@ -83,16 +67,27 @@ app.post("/offer", authRecipientToken(), async (c) => {
 
 // ── POST /claim — New device downloads encrypted key bundle ──
 app.post("/claim", async (c) => {
-  // No auth required — the code IS the auth
   const { code } = await c.req.json<{ code: string }>();
 
   if (!code) {
     return c.json({ error: "code is required" }, 400);
   }
 
-  cleanExpired();
+  const normalizedCode = code.trim().toUpperCase();
 
-  const offer = pendingOffers.get(code);
+  // Clean expired
+  await c.env.DB.prepare(
+    "DELETE FROM clone_offers WHERE expires_at < ?"
+  ).bind(Date.now()).run();
+
+  const offer = await c.env.DB.prepare(
+    "SELECT code, encrypted_bundle, expires_at, claimed FROM clone_offers WHERE code = ?"
+  ).bind(normalizedCode).first<{
+    code: string;
+    encrypted_bundle: string;
+    expires_at: number;
+    claimed: number;
+  }>();
 
   if (!offer) {
     return c.json({ error: "无效或已过期的配对码" }, 404);
@@ -103,17 +98,29 @@ app.post("/claim", async (c) => {
   }
 
   if (offer.expires_at < Date.now()) {
-    pendingOffers.delete(code);
+    await c.env.DB.prepare("DELETE FROM clone_offers WHERE code = ?").bind(normalizedCode).run();
     return c.json({ error: "配对码已过期" }, 410);
   }
 
-  // Mark as claimed and delete
-  offer.claimed = true;
-  pendingOffers.delete(code);
+  // Mark claimed and delete
+  await c.env.DB.prepare("DELETE FROM clone_offers WHERE code = ?").bind(normalizedCode).run();
 
   return c.json({
     encrypted_bundle: offer.encrypted_bundle,
   });
+});
+
+// ── POST /cancel — Delete a pending offer (when user leaves the page) ──
+app.post("/cancel", authRecipientToken(), async (c) => {
+  const { code } = await c.req.json<{ code: string }>();
+
+  if (!code) {
+    return c.json({ error: "code is required" }, 400);
+  }
+
+  await c.env.DB.prepare("DELETE FROM clone_offers WHERE code = ?").bind(code.trim().toUpperCase()).run();
+
+  return c.json({ ok: true });
 });
 
 export default app;
