@@ -18,7 +18,7 @@
 #    HX_HOUTIKU_TOKEN     — 管理员 Token（必填）
 #
 #  示例 .env 配置：
-#    export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.你的域名.workers.dev"
+#    export HX_HOUTIKU_ENDPOINT="https://houtiku.api.woa.qzz.io"
 #    export HX_HOUTIKU_TOKEN="ak-hx-houtiku-你的Token"
 # ============================================================
 

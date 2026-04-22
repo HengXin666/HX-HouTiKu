@@ -74,9 +74,20 @@ AI 定时任务、CI/CD、监控告警、工作流通知……消息来源越来
 
 ## 快速开始
 
-> 完整步骤见 [部署教程](./docs/DEPLOYMENT.md)，这里是极简版。
+> 完整步骤见 [部署教程](./docs/DEPLOYMENT.md)。
 
-### 1. 部署后端
+### 🚀 一键配置 (推荐)
+
+```bash
+python scripts/setup.py
+```
+
+交互式引导完成全部配置: 创建数据库 → 生成密钥 → 设置 Secrets → 部署 Worker → 配置 GitHub CI，最后输出所有机密总结表。
+
+<details>
+<summary>手动步骤 (如果你偏好手动操作)</summary>
+
+#### 1. 部署后端
 
 ```bash
 cd worker && pnpm install
@@ -90,14 +101,16 @@ npx wrangler secret put VAPID_PRIVATE_KEY
 npx wrangler deploy                       # 部署!
 ```
 
-### 2. 部署前端
+#### 2. 部署前端
 
 ```bash
 cd frontend && pnpm install
-echo 'VITE_API_BASE=https://hx-houtiku-api.你的子域名.workers.dev' > .env.production
+echo 'VITE_API_BASE=https://houtiku.api.woa.qzz.io' > .env.production
 pnpm build
 npx wrangler pages deploy dist --project-name hx-houtiku
 ```
+
+</details>
 
 ### 3. 发送第一条消息
 
@@ -114,7 +127,7 @@ push("Hello World", "第一条加密推送 🎉", priority="high", group="test")
 环境变量：
 
 ```bash
-export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.你的子域名.workers.dev"
+export HX_HOUTIKU_ENDPOINT="https://houtiku.api.woa.qzz.io"
 export HX_HOUTIKU_TOKEN="你的ADMIN_TOKEN"
 ```
 

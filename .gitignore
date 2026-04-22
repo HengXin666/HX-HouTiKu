@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 .venv/
 
+# 机密配置 (setup.py 生成)
+.secrets.env
+
 # Build
 dist/
 build/

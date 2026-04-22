@@ -67,13 +67,23 @@ HX-HouTiKu/
 │   │   ├── index.ts         # 入口文件(Hono 路由挂载)
 │   │   ├── auth.ts          # 认证中间件(Admin Token / API Token / Recipient Token)
 │   │   ├── cron.ts          # 定时清理过期消息
+│   │   ├── push-service.ts  # 两层投递: DO WebSocket → Web Push/FCM
+│   │   ├── webpush.ts       # Web Push 协议实现
+│   │   ├── fcm.ts           # Firebase Cloud Messaging 实现
+│   │   ├── rate-limit.ts    # API 速率限制
 │   │   ├── types.ts         # TypeScript 类型定义
+│   │   ├── durable-objects/
+│   │   │   └── message-relay.ts  # Durable Object — WebSocket 实时消息中继
 │   │   └── routes/          # API 路由
-│   │       ├── push.ts          # POST /api/push
-│   │       ├── messages.ts      # GET/POST /api/messages
-│   │       ├── recipients.ts    # POST /api/recipients
-│   │       ├── subscribe.ts     # POST /api/subscribe
-│   │       └── config.ts        # GET /api/config
+│   │       ├── push.ts          # POST /api/push — 推送加密消息
+│   │       ├── messages.ts      # GET/POST /api/messages — 消息拉取与已读
+│   │       ├── recipients.ts    # CRUD /api/recipients — 接收者管理
+│   │       ├── subscribe.ts     # POST/DELETE /api/subscribe — 推送订阅
+│   │       ├── config.ts        # GET /api/config — 公共配置
+│   │       ├── websocket.ts     # GET /api/ws — WebSocket 连接升级
+│   │       ├── channels.ts      # CRUD /api/channels — 频道管理
+│   │       ├── test-push.ts     # POST /api/test-push — 测试推送(服务端加密)
+│   │       └── image-proxy.ts   # GET /api/image-proxy — 图片反代
 │   ├── schema.sql           # D1 数据库 Schema
 │   ├── package.json
 │   └── wrangler.example.toml
@@ -81,9 +91,11 @@ HX-HouTiKu/
 │   ├── src/
 │   │   ├── lib/             # 核心库
 │   │   │   ├── crypto.ts        # ECIES 加解密
-│   │   │   ├── api.ts           # API 客户端
+│   │   │   ├── api.ts           # HTTP API 客户端
+│   │   │   ├── ws-manager.ts    # WebSocket 全局单例管理器(零 React 依赖)
 │   │   │   ├── db.ts            # IndexedDB 操作
-│   │   │   ├── push.ts          # Web Push 管理
+│   │   │   ├── push.ts          # Web Push 注册
+│   │   │   ├── platform.ts      # 平台检测
 │   │   │   └── utils.ts         # 工具函数
 │   │   ├── stores/          # Zustand 状态管理
 │   │   │   ├── auth-store.ts    # 认证/密钥状态
@@ -91,19 +103,27 @@ HX-HouTiKu/
 │   │   │   └── settings-store.ts# 设置状态
 │   │   ├── pages/           # 页面组件
 │   │   ├── components/      # UI 组件
+│   │   │   ├── layout/          # AppShell, Sidebar, Header, BottomNav
+│   │   │   ├── message/         # 消息列表, 消息卡片, 内容渲染器
+│   │   │   └── NotificationToast.tsx  # 应用内消息弹窗(macOS 风格)
 │   │   ├── hooks/           # 自定义 Hooks
-│   │   └── service-worker/  # Service Worker
+│   │   │   ├── use-messages.ts  # 全局消息接收 + 页面级读取
+│   │   │   └── use-websocket.ts # WS 状态订阅(useSyncExternalStore)
+│   │   └── service-worker/  # Service Worker(Web Push)
 │   ├── package.json
 │   └── vite.config.ts
 ├── sdk/python/          # Python SDK
 │   ├── hx_houtiku/
 │   │   ├── __init__.py      # 包入口, 导出 push() 函数
-│   │   ├── client.py        # 推送客户端
+│   │   ├── client.py        # 推送客户端(含重试、缓存)
 │   │   ├── crypto.py        # ECIES 加密
-│   │   ├── config.py        # 配置加载
-│   │   ├── models.py        # 数据模型
+│   │   ├── config.py        # 配置加载(环境变量/YAML/JSON)
+│   │   ├── models.py        # 数据模型(Priority, ContentType, Message)
 │   │   └── cli.py           # 命令行入口
 │   └── pyproject.toml
+├── android/             # Android 原生 App(Kotlin + WebView)
+├── examples/            # 使用示例
+│   └── py-sdk-demo/         # Python SDK 完整 demo
 ├── scripts/
 │   └── hx-houtiku.sh       # Shell 推送脚本
 └── docs/                # 文档

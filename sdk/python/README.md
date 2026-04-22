@@ -33,7 +33,7 @@ hx-houtiku "Log Output" -b "$(cat /tmp/output.log)" -t text -p low
 ### Environment Variables (minimal)
 
 ```bash
-export HX_HOUTIKU_ENDPOINT="https://your-worker.workers.dev"
+export HX_HOUTIKU_ENDPOINT="https://houtiku.api.woa.qzz.io"
 export HX_HOUTIKU_TOKEN="your-api-token"
 # HX_HOUTIKU_RECIPIENTS is optional — auto-fetched from Worker API if omitted
 ```
@@ -42,7 +42,7 @@ export HX_HOUTIKU_TOKEN="your-api-token"
 
 ```yaml
 # ~/.hx-houtiku.yaml
-endpoint: https://your-worker.workers.dev
+endpoint: https://houtiku.api.woa.qzz.io
 api_token: your-api-token
 # recipients: optional, auto-fetched if omitted
 defaults:
@@ -80,7 +80,7 @@ No need to manually maintain public key lists:
 
 ```python
 client = HxHoutikuClient(
-    endpoint="https://your-worker.workers.dev",
+    endpoint="https://houtiku.api.woa.qzz.io",
     api_token="your-token",
     # No recipients needed! Auto-fetched on first send.
 )

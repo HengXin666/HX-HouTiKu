@@ -242,7 +242,7 @@ npx wrangler deploy
 ```
 Total Upload: 42.15 KiB / gzip: 12.34 KiB
 Published hx-houtiku-api (1.23 sec)
-  https://hx-houtiku-api.你的子域名.workers.dev
+  https://houtiku.api.woa.qzz.io
 ```
 
 **验证**: 浏览器打开这个 URL, 应该看到: 
@@ -274,13 +274,13 @@ pnpm install
 
 ```bash
 # Linux/macOS
-echo 'VITE_API_BASE=https://hx-houtiku-api.你的子域名.workers.dev' > .env.production
+echo 'VITE_API_BASE=https://houtiku.api.woa.qzz.io' > .env.production
 
 # Windows PowerShell
-"VITE_API_BASE=https://hx-houtiku-api.你的子域名.workers.dev" | Out-File -Encoding utf8 .env.production
+"VITE_API_BASE=https://houtiku.api.woa.qzz.io" | Out-File -Encoding utf8 .env.production
 ```
 
-> 把 `你的子域名` 替换为你的 Cloudflare Workers 子域名。
+> 如果你使用自己的 Worker 子域名，请替换为对应地址。
 
 ### 4.3 构建
 
@@ -309,7 +309,7 @@ No project found. Would you like to create one?
 
 ```
 ✨ Deployment complete!
-  https://hx-houtiku.你的pages域名.pages.dev
+  https://houtiku.woa.qzz.io
 ```
 
 **验证**: 浏览器打开这个 URL, 应该能看到锁屏界面或设置向导。
@@ -343,7 +343,7 @@ No project found. Would you like to create one?
 也可以用 cURL 手动注册: 
 
 ```bash
-curl -X POST https://hx-houtiku-api.你的子域名.workers.dev/api/recipients \
+curl -X POST https://houtiku.api.woa.qzz.io/api/recipients \
   -H "Authorization: Bearer 你的ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -381,12 +381,12 @@ curl -X POST https://hx-houtiku-api.你的子域名.workers.dev/api/recipients \
 
 ```bash
 # Linux/macOS — 加到 ~/.bashrc 或 ~/.zshrc
-export HX_HOUTIKU_ENDPOINT="https://hx-houtiku-api.你的子域名.workers.dev"
+export HX_HOUTIKU_ENDPOINT="https://houtiku.api.woa.qzz.io"
 export HX_HOUTIKU_TOKEN="你设置的ADMIN_TOKEN"
 # HX_HOUTIKU_RECIPIENTS 不需要配置! SDK 会自动从 Worker API 拉取已注册设备
 
 # Windows PowerShell — 加到 $PROFILE
-$env:HX_HOUTIKU_ENDPOINT = "https://hx-houtiku-api.你的子域名.workers.dev"
+$env:HX_HOUTIKU_ENDPOINT = "https://houtiku.api.woa.qzz.io"
 $env:HX_HOUTIKU_TOKEN = "你设置的ADMIN_TOKEN"
 ```
 
@@ -398,7 +398,7 @@ $env:HX_HOUTIKU_TOKEN = "你设置的ADMIN_TOKEN"
 创建 `~/.hx-houtiku.yaml`: 
 
 ```yaml
-endpoint: https://hx-houtiku-api.你的子域名.workers.dev
+endpoint: https://houtiku.api.woa.qzz.io
 api_token: sk-hx-houtiku-你的令牌
 # recipients 可选, 不写则自动从 Worker API 拉取
 defaults:
@@ -481,7 +481,7 @@ push('🎉 部署成功', '恭喜! HX-HouTiKu 已经配置完成。', priority='
 2. 点击你的 Worker(`hx-houtiku-api`)
 3. 进入 **Settings → Domains & Routes → Custom Domains**
 4. 点击 **Add Custom Domain**
-5. 输入子域名, 如 `api.yourdomain.com`
+5. 输入子域名, 如 `houtiku.api.woa.qzz.io`
 6. Cloudflare 会自动创建 DNS 记录, 点击确认
 
 **方式二: wrangler.toml 配置(推荐长期维护)**
@@ -491,7 +491,7 @@ push('🎉 部署成功', '恭喜! HX-HouTiKu 已经配置完成。', priority='
 ```toml
 # 自定义域名(取消注释并修改为你的域名)
 routes = [
-  { pattern = "api.yourdomain.com", custom_domain = true }
+  { pattern = "houtiku.api.woa.qzz.io", custom_domain = true }
 ]
 
 # 可选: 绑定自定义域名后, 禁用 workers.dev 默认域名
@@ -506,7 +506,7 @@ routes = [
 1. 打开 Cloudflare Dashboard → **Workers & Pages**
 2. 点击你的 Pages 项目(`hx-houtiku`)
 3. 进入 **Custom domains**
-4. 添加域名, 如 `push.yourdomain.com`
+4. 添加域名, 如 `houtiku.woa.qzz.io`
 
 ### 步骤 4: 更新所有客户端配置
 
@@ -514,23 +514,23 @@ routes = [
 
 **前端 (GitHub Variables):**
 ```
-VITE_API_BASE=https://api.yourdomain.com
+VITE_API_BASE=https://houtiku.api.woa.qzz.io
 ```
 
 **Android (gradle.properties):**
 ```properties
 # ⚠️ Android WebView 加载的是前端页面，不是 API！
-API_BASE=https://yourdomain.com
+API_BASE=https://houtiku.woa.qzz.io
 ```
 
 **SDK 环境变量:**
 ```bash
-export HX_HOUTIKU_ENDPOINT="https://api.yourdomain.com"
+export HX_HOUTIKU_ENDPOINT="https://houtiku.api.woa.qzz.io"
 ```
 
 **CI (GitHub Variables → VITE_API_BASE):**
 ```
-https://api.yourdomain.com
+https://houtiku.api.woa.qzz.io
 ```
 
 > 更新后推一次代码触发 CI 重新构建前端, 或手动 `pnpm build && wrangler pages deploy`。
@@ -539,11 +539,11 @@ https://api.yourdomain.com
 
 ```bash
 # 测试 Worker 自定义域名
-curl https://api.yourdomain.com/
+curl https://houtiku.api.woa.qzz.io/
 # 应返回 {"name":"hx-houtiku-api","version":"1.0.0","status":"ok"}
 
 # 测试 Pages 自定义域名
-curl -I https://push.yourdomain.com/
+curl -I https://houtiku.woa.qzz.io/
 # 应返回 200 OK
 
 # 对比测试(如果 workers.dev 还没禁用)
@@ -555,8 +555,8 @@ curl --connect-timeout 5 https://hx-houtiku-api.xxx.workers.dev/
 
 | 子域名 | 用途 | 绑定到 |
 |--------|------|--------|
-| `api.yourdomain.com` | Worker API 后端 | Workers Custom Domain |
-| `push.yourdomain.com` | 前端 PWA | Pages Custom Domain |
+| `houtiku.api.woa.qzz.io` | Worker API 后端 | Workers Custom Domain |
+| `houtiku.woa.qzz.io` | 前端 PWA | Pages Custom Domain |
 
 > 💡 绑定自定义域名是完全免费的, 不需要 Cloudflare 付费套餐。
 > 唯一的成本是域名本身的注册费(通常 $1-10/年)。
@@ -633,8 +633,8 @@ npx wrangler whoami
 
 | 名称 | 值 | 说明 |
 |------|-----|------|
-| `VITE_API_BASE` | `https://hx-houtiku-api.xxx.workers.dev` | 后端 API 地址，会编译进前端代码 |
-| `ANDROID_FRONTEND_URL` | `https://hx-houtiku.xxx.pages.dev` | 前端 Pages 地址，Android WebView 加载用 |
+| `VITE_API_BASE` | `https://houtiku.api.woa.qzz.io` | 后端 API 地址，会编译进前端代码 |
+| `ANDROID_FRONTEND_URL` | `https://houtiku.woa.qzz.io` | 前端 Pages 地址，Android WebView 加载用 |
 
 > ⚠️ `VITE_API_BASE` 和 `ANDROID_FRONTEND_URL` 是 Variable（明文），不是 Secret。
 > `VITE_API_BASE` 指向 Worker API 后端，`ANDROID_FRONTEND_URL` 指向 Cloudflare Pages 前端。

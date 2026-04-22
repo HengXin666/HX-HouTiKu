@@ -1,73 +1,27 @@
-# ============================================================
-#  HX-HouTiKu — Cloudflare Worker 配置文件
-#
-#  使用方式: 
-#    1. 复制此文件: cp wrangler.example.toml wrangler.toml
-#    2. 替换下面的 database_id 为你自己的值
-#    3. 通过 `wrangler secret put` 设置密钥(不要写在这个文件里)
-#
-#  详细文档: https://developers.cloudflare.com/workers/wrangler/configuration/
-# ============================================================
-
-# Worker 名称, 会出现在 URL 中: https://<name>.<your-subdomain>.workers.dev
 name = "hx-houtiku-api"
-
-# 入口文件
 main = "src/index.ts"
-
-# 兼容日期(决定 Workers 运行时 API 的版本)
 compatibility_date = "2024-12-01"
 
-# 定时任务配置
-# Cron 表达式, UTC 时区
-# "0 2 * * *" = 每天凌晨 2:00 (UTC) 执行, 用于自动清理过期消息
 [triggers]
 crons = ["0 2 * * *"]
 
-# D1 数据库绑定
-# database_id 通过 `npx wrangler d1 create hx-houtiku` 命令创建后获得
 [[d1_databases]]
-binding = "DB"                        # 代码中通过 env.DB 访问
-database_name = "hx-houtiku"          # 数据库名称
-database_id = "82df3835-5359-4ecc-9258-816a97a01d4a" # ← 替换为你的 database_id! 
+binding = "DB"
+database_name = "hx-houtiku"
+database_id = "fd1c90d5-cf6a-45de-8d7d-90df10e611b6"
 
-# Durable Objects 绑定
-# MessageRelay: 每个 recipient 一个实例, 负责 WebSocket 实时推送
 [durable_objects]
 bindings = [
   { name = "MESSAGE_RELAY", class_name = "MessageRelay" }
 ]
 
-# DO 迁移配置 (首次部署必须)
-# 免费套餐必须使用 new_sqlite_classes (而非 new_classes)
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MessageRelay"]
 
-# 明文环境变量(非敏感信息)
 [vars]
-ENCRYPTION_CURVE = "secp256k1"  # ECIES 加密使用的椭圆曲线, 不要修改
+ENCRYPTION_CURVE = "secp256k1"
 
-# ============================================================
-#  以下密钥必须通过命令行设置, 不要写在配置文件中! 
-#  设置方式: 
-#
-#    npx wrangler secret put ADMIN_TOKEN
-#    # → 输入管理员令牌(SDK 推送消息时用的 Bearer Token)
-#    # → 推荐格式: sk-hx-houtiku-<随机字符串>
-#
-#    npx wrangler secret put VAPID_PUBLIC_KEY
-#    # → 粘贴 Web Push VAPID 公钥
-#    # → 通过 `npx web-push generate-vapid-keys` 生成
-#
-#    npx wrangler secret put VAPID_PRIVATE_KEY
-#    # → 粘贴 Web Push VAPID 私钥
-#
-#    npx wrangler secret put FCM_SERVICE_ACCOUNT
-#    # → 粘贴 Firebase 服务账号 JSON 的 Base64 编码
-#    # → 生成方式: base64 -w0 < firebase-service-account.json
-#    # → 用于向 Android 原生 App 发送 FCM 推送
-#    # → 如果不需要 Android 原生推送, 可以不设置
-#
-#  查看已有密钥列表: npx wrangler secret list
-# ============================================================
+routes = [
+  { pattern = "houtiku.api.woa.qzz.io", custom_domain = true }
+]

@@ -209,7 +209,7 @@ echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
 
 # 配置前端地址 (gradle.properties 也已 gitignore)
 # ⚠️ 注意：这里填的是前端 Cloudflare Pages URL，不是 Worker API URL！
-echo 'API_BASE=https://hx-houtiku.your-pages-domain.pages.dev' >> gradle.properties
+echo 'API_BASE=https://houtiku.woa.qzz.io' >> gradle.properties
 
 # Debug 构建
 ./gradlew assembleDebug
