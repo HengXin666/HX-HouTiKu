@@ -49,6 +49,19 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+    // Camera permission launcher — for WebView getUserMedia requests
+    private var pendingPermissionRequest: PermissionRequest? = null
+    private val cameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val request = pendingPermissionRequest
+            pendingPermissionRequest = null
+            if (granted && request != null) {
+                request.grant(request.resources)
+            } else {
+                request?.deny()
+            }
+        }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -169,6 +182,28 @@ class MainActivity : ComponentActivity() {
                     Log.d("WebView", "${it.sourceId()}:${it.lineNumber()} — ${it.message()}")
                 }
                 return true
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                request ?: return
+                val resources = request.resources
+                // Check if camera is requested (getUserMedia for QR scanning)
+                if (resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                    runOnUiThread {
+                        if (ContextCompat.checkSelfPermission(
+                                this@MainActivity,
+                                Manifest.permission.CAMERA
+                            ) == PackageManager.PERMISSION_GRANTED
+                        ) {
+                            request.grant(resources)
+                        } else {
+                            pendingPermissionRequest = request
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    }
+                } else {
+                    request.grant(resources)
+                }
             }
         }
     }
