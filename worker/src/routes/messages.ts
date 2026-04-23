@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { Env, MessageRow } from "../types";
 import { authRecipientToken } from "../auth";
 
@@ -60,8 +60,10 @@ app.get("/", authRecipientToken(), async (c) => {
   });
 });
 
-// POST /api/messages/read — mark messages as read
-app.post("/read", authRecipientToken(), async (c) => {
+// PUT /api/messages/read — mark messages as read (preferred)
+// POST /api/messages/read — kept for backward compatibility
+const markRead = authRecipientToken();
+const markReadHandler = async (c: Context<{ Bindings: Env; Variables: { recipientId?: string } }>) => {
   const { message_ids } = await c.req.json<{ message_ids: string[] }>();
 
   if (!message_ids || message_ids.length === 0) {
@@ -77,7 +79,9 @@ app.post("/read", authRecipientToken(), async (c) => {
   await c.env.DB.batch(statements);
 
   return c.json({ updated: message_ids.length });
-});
+};
+app.put("/read", markRead, markReadHandler);
+app.post("/read", markRead, markReadHandler);
 
 // DELETE /api/messages — permanently delete messages
 app.delete("/", authRecipientToken(), async (c) => {

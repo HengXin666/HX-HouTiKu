@@ -50,11 +50,17 @@ app.post("/", authPushToken(), async (c) => {
     group_key: groupKey,
   };
 
-  for (const recipient of allRecipients.results) {
-    pushedTo.push(recipient.name);
-    const delivery = await deliverToRecipient(c.env, recipient.id, deliveryPayload);
-    if (delivery.ws_sent) wsSent.push(recipient.name);
-    if (delivery.push_sent) pushSent.push(recipient.name);
+  const deliveryResults = await Promise.all(
+    allRecipients.results.map(async (recipient) => {
+      const delivery = await deliverToRecipient(c.env, recipient.id, deliveryPayload);
+      return { name: recipient.name, ...delivery };
+    })
+  );
+
+  for (const r of deliveryResults) {
+    pushedTo.push(r.name);
+    if (r.ws_sent) wsSent.push(r.name);
+    if (r.push_sent) pushSent.push(r.name);
   }
 
   return c.json({

@@ -22,6 +22,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import com.hxhoutiku.app.service.HxWebSocketService
@@ -69,6 +70,10 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        // installSplashScreen() MUST be called before super.onCreate()
+        // when using Theme.SplashScreen, otherwise the app crashes immediately.
+        installSplashScreen()
+
         // Must be called BEFORE super.onCreate() to prevent action bar flash
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE)
 

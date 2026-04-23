@@ -278,7 +278,8 @@ class HxWebSocketService : Service() {
             val ws = webSocket
             if (ws != null) {
                 try {
-                    ws.send("""{"type":"ping","ts":${System.currentTimeMillis()}}""")
+                    // Must exactly match server's setWebSocketAutoResponse request string
+                    ws.send("""{"type":"ping"}""")
                     Log.d(TAG, "Ping sent")
                 } catch (e: Exception) {
                     Log.w(TAG, "Ping failed", e)

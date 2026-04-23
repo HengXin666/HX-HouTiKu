@@ -42,11 +42,6 @@ type ServerMessage =
   | { type: "connected"; device_count: number }
   | { type: "error"; message: string };
 
-/** Inbound message types received from clients */
-type ClientMessage =
-  | { type: "ping" }
-  | { type: "mark_read"; message_ids: string[] };
-
 export class MessageRelay implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
@@ -54,6 +49,16 @@ export class MessageRelay implements DurableObject {
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
+
+    // Auto-respond to client pings without waking the DO.
+    // Client sends: {"type":"ping"}  →  CF auto-replies: {"type":"pong"}
+    // This avoids 20:1 inbound-message billing for heartbeats.
+    this.state.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(
+        JSON.stringify({ type: "ping" }),
+        JSON.stringify({ type: "pong" }),
+      ),
+    );
   }
 
   /**
@@ -142,40 +147,17 @@ export class MessageRelay implements DurableObject {
 
   /**
    * Called when a hibernated DO wakes up due to an incoming WebSocket message.
+   * Note: ping messages are handled by setWebSocketAutoResponse and never reach here.
    */
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    if (typeof message !== "string") return;
-
-    try {
-      const data = JSON.parse(message) as ClientMessage;
-
-      switch (data.type) {
-        case "ping":
-          ws.send(JSON.stringify({ type: "pong" } satisfies ServerMessage));
-          break;
-
-        case "mark_read":
-          // Forward read receipts to D1
-          if (data.message_ids?.length > 0) {
-            await this.handleMarkRead(ws, data.message_ids);
-          }
-          break;
-      }
-    } catch {
-      ws.send(JSON.stringify({
-        type: "error",
-        message: "Invalid message format",
-      } satisfies ServerMessage));
-    }
+    // All client messages are currently handled by auto-response (ping → pong).
+    // This callback is kept for future extensibility.
   }
 
   /**
    * Called when a WebSocket is closed (by client or network).
    */
   async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
-    // Close the socket
-    ws.close(code, reason);
-
     // Broadcast updated device count to remaining sockets
     const sockets = this.state.getWebSockets();
     if (sockets.length > 0) {
@@ -197,24 +179,4 @@ export class MessageRelay implements DurableObject {
     try { ws.close(1011, "Internal error"); } catch { /* ignore */ }
   }
 
-  // ── Helpers ─────────────────────────────────────────────────
-
-  private async handleMarkRead(ws: WebSocket, messageIds: string[]): Promise<void> {
-    let meta: WebSocketMeta | undefined;
-    try {
-      meta = (ws as any).deserializeAttachment() as WebSocketMeta;
-    } catch { /* no meta */ }
-
-    if (!meta?.recipientId) return;
-
-    const statements = messageIds.map((id) =>
-      this.env.DB.prepare(
-        "UPDATE messages SET is_read = 1 WHERE id = ? AND recipient_id = ?"
-      ).bind(id, meta!.recipientId)
-    );
-
-    if (statements.length > 0) {
-      await this.env.DB.batch(statements);
-    }
-  }
 }

@@ -1,15 +1,9 @@
 /**
- * Two-layer rate limiter: in-memory cache + D1 persistent storage.
+ * Pure in-memory rate limiter — no D1 dependency.
  *
- * Layer 1 (memory): Fast path — check and increment in-memory counters.
- *   This handles most requests within a single isolate's lifetime.
- *
- * Layer 2 (D1): Slow path — periodically sync with D1 for cross-isolate accuracy.
- *   On cold start or when a window expires, read from D1 to get the true count
- *   across all isolates, then write back periodically.
- *
- * This design avoids D1 queries on every request while still providing
- * meaningful rate limiting across Worker isolates.
+ * For a personal project, cross-isolate accuracy is unnecessary.
+ * Each isolate maintains its own counters; a cold start resets them.
+ * This avoids consuming D1 row-write quota on every request window.
  */
 
 import type { Context, Next } from "hono";
@@ -38,8 +32,6 @@ const DEFAULT_LIMIT: RateLimitConfig = { maxRequests: 60, windowSec: 60 };
 interface Bucket {
   count: number;
   windowStart: number;
-  /** Whether this bucket has been synced from D1 in this window */
-  synced: boolean;
 }
 
 const buckets = new Map<string, Bucket>();
@@ -88,30 +80,8 @@ export function rateLimiter() {
     let bucket = buckets.get(bucketKey);
 
     if (!bucket || (now - bucket.windowStart) >= config.windowSec) {
-      // New window — try to sync from D1 for cross-isolate accuracy
-      let d1Count = 0;
-      try {
-        const row = await c.env.DB.prepare(
-          "SELECT hit_count, window_start FROM rate_limit_hits WHERE bucket = ?"
-        ).bind(bucketKey).first<{ hit_count: number; window_start: number }>();
-
-        if (row && (now - row.window_start) < config.windowSec) {
-          d1Count = row.hit_count;
-        }
-      } catch {
-        // D1 failure — fall back to memory-only
-      }
-
-      bucket = { count: d1Count + 1, windowStart: now, synced: true };
+      bucket = { count: 1, windowStart: now };
       buckets.set(bucketKey, bucket);
-
-      // Write to D1 (fire-and-forget)
-      c.executionCtx.waitUntil(
-        c.env.DB.prepare(
-          `INSERT INTO rate_limit_hits (bucket, hit_count, window_start) VALUES (?, ?, ?)
-           ON CONFLICT(bucket) DO UPDATE SET hit_count = ?, window_start = ?`
-        ).bind(bucketKey, bucket.count, now, bucket.count, now).run().catch(() => {})
-      );
     } else {
       bucket.count++;
 
@@ -122,16 +92,6 @@ export function rateLimiter() {
         c.header("X-RateLimit-Remaining", "0");
         c.header("X-RateLimit-Reset", String(bucket.windowStart + config.windowSec));
         return c.json({ error: "Too many requests", retry_after: retryAfter }, 429);
-      }
-
-      // Periodic D1 sync (every 10 requests)
-      if (bucket.count % 10 === 0) {
-        c.executionCtx.waitUntil(
-          c.env.DB.prepare(
-            `INSERT INTO rate_limit_hits (bucket, hit_count, window_start) VALUES (?, ?, ?)
-             ON CONFLICT(bucket) DO UPDATE SET hit_count = ?, window_start = ?`
-          ).bind(bucketKey, bucket.count, bucket.windowStart, bucket.count, bucket.windowStart).run().catch(() => {})
-        );
       }
     }
 

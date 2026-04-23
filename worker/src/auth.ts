@@ -50,13 +50,6 @@ export function authPushToken() {
       return c.json({ error: "Invalid API token" }, 401);
     }
 
-    // Update last_used_at
-    await c.env.DB.prepare(
-      "UPDATE api_tokens SET last_used_at = ? WHERE id = ?"
-    )
-      .bind(Date.now(), row.id)
-      .run();
-
     c.set("tokenPermissions", JSON.parse(row.permissions));
     return next();
   };
