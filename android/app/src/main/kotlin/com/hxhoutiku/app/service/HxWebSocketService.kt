@@ -50,6 +50,7 @@ class HxWebSocketService : Service() {
     private var webSocket: WebSocket? = null
     private var client: OkHttpClient? = null
     private var pingHandler: Handler? = null
+    private var reconnectHandler: Handler? = null
     private var reconnectDelayMs = RECONNECT_BASE_DELAY_MS
     private var isUserInitiatedDisconnect = false
 
@@ -152,6 +153,7 @@ class HxWebSocketService : Service() {
             .build()
 
         pingHandler = Handler(Looper.getMainLooper())
+        reconnectHandler = Handler(Looper.getMainLooper())
         Log.i(TAG, "WebSocket service created")
     }
 
@@ -194,6 +196,8 @@ class HxWebSocketService : Service() {
         disconnect()
         pingHandler?.removeCallbacksAndMessages(null)
         pingHandler = null
+        reconnectHandler?.removeCallbacksAndMessages(null)
+        reconnectHandler = null
         client?.dispatcher?.executorService?.shutdown()
         client = null
         Log.i(TAG, "WebSocket service destroyed")
@@ -223,13 +227,15 @@ class HxWebSocketService : Service() {
         } catch (_: Exception) {}
         webSocket = null
         cancelPing()
+        reconnectHandler?.removeCallbacksAndMessages(null)
     }
 
     private fun scheduleReconnect() {
         if (isUserInitiatedDisconnect) return
 
         Log.d(TAG, "Scheduling reconnect in ${reconnectDelayMs}ms")
-        pingHandler?.postDelayed({
+        reconnectHandler?.removeCallbacksAndMessages(null)
+        reconnectHandler?.postDelayed({
             if (!isUserInitiatedDisconnect) {
                 connect()
             }
@@ -444,6 +450,14 @@ class HxWebSocketService : Service() {
     }
 
     private fun startForegroundNotification() {
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.ws_notification_title))
             .setContentText(getString(R.string.ws_notification_text))
@@ -451,6 +465,7 @@ class HxWebSocketService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setSilent(true)
+            .setContentIntent(pendingIntent)
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
@@ -460,6 +475,7 @@ class HxWebSocketService : Service() {
 
     private fun broadcast(type: String, data: String) {
         val intent = Intent(ACTION_WS_BROADCAST).apply {
+            setPackage(packageName)
             putExtra(BROADCAST_EXTRA_TYPE, type)
             putExtra(BROADCAST_EXTRA_DATA, data)
         }

@@ -29,14 +29,16 @@ import kotlinx.coroutines.*
 
 /**
  * Hybrid Android shell: WebView loads the React frontend,
- * native code handles notification permissions, FCM token, and background push.
+ * native code handles notification permissions and background push via WebSocket.
  *
  * JS Bridge (`window.HxNative`) exposes:
- *   - getFcmToken()          → returns FCM device token (async, via callback)
  *   - requestNotification()  → triggers system notification permission dialog
  *   - getNotificationStatus()→ returns "granted" | "denied" | "default"
  *   - getPlatform()          → returns "android"
  *   - getAppVersion()        → returns app version string
+ *   - startWebSocket(...)    → starts background WS foreground service
+ *   - stopWebSocket()        → stops background WS service
+ *   - saveApiBase(url)       → persists frontend URL for next launch
  */
 class MainActivity : AppCompatActivity() {
 
@@ -455,6 +457,16 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun startWebSocket(wsUrl: String, token: String, recipientId: String) {
             Log.d("HxBridge", "Starting WS service: url=$wsUrl recipient=$recipientId")
+
+            // Persist WS credentials for auto-restart after reboot
+            getSharedPreferences("hx_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putString("ws_api_base", wsUrl)
+                .putString("ws_token", token)
+                .putString("ws_recipient_id", recipientId)
+                .putString("recipient_token", token)
+                .apply()
+
             HxWebSocketService.start(
                 this@MainActivity,
                 wsUrl,
@@ -467,6 +479,15 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun stopWebSocket() {
             Log.d("HxBridge", "Stopping WS service")
+
+            // Clear persisted WS credentials so boot receiver won't restart
+            getSharedPreferences("hx_settings", Context.MODE_PRIVATE)
+                .edit()
+                .remove("ws_api_base")
+                .remove("ws_token")
+                .remove("ws_recipient_id")
+                .apply()
+
             HxWebSocketService.stop(this@MainActivity)
         }
 
