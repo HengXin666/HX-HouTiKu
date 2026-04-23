@@ -8,9 +8,7 @@ appcompat = "1.7.0"
 splashScreen = "1.0.1"
 webkit = "1.12.1"
 okhttp = "4.12.0"
-firebase = "33.7.0"
 coroutines = "1.9.0"
-googleServices = "4.4.2"
 
 [libraries]
 # AndroidX Core
@@ -24,16 +22,10 @@ androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "w
 # Network
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 
-# Firebase
-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase" }
-firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging-ktx" }
-
 # Coroutines
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
-kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
-google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

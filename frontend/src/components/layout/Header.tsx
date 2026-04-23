@@ -105,7 +105,7 @@ export function Header() {
               <>
                 <button
                   onClick={() => setSearchOpen(true)}
-                  className="app-header-action"
+                  className="app-header-action app-header-action--hide-desktop"
                   title="搜索"
                 >
                   <Search className="app-header-action-icon" />

@@ -347,9 +347,9 @@ class HxWebSocketService : Service() {
      */
     private fun showMessageNotification(messageId: String, priority: String, group: String) {
         val title = when (priority) {
-            "urgent" -> "⚠️ 紧急 · $group"
-            "high" -> "❗ 重要 · $group"
-            else -> "📨 $group · 新消息"
+            "urgent" -> "紧急 · $group"
+            "high" -> "重要 · $group"
+            else -> "$group · 新消息"
         }
         val body = when (priority) {
             "urgent" -> "收到紧急消息，请立即查看"

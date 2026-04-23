@@ -24,10 +24,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
-import com.google.firebase.messaging.FirebaseMessaging
 import com.hxhoutiku.app.service.HxWebSocketService
 import kotlinx.coroutines.*
-import kotlinx.coroutines.tasks.await
 
 /**
  * Hybrid Android shell: WebView loads the React frontend,
@@ -170,6 +168,24 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 // Inject safe-area CSS variables for notch/status bar
                 injectSafeAreaInsets()
+
+                // P0 fix: Detect if WebView accidentally loaded the API health-check JSON
+                // instead of the frontend SPA. This happens when api_base was overwritten
+                // with the Worker API URL (e.g. by a previous registerFcmPush call).
+                if (url != null && !url.startsWith("file:///")) {
+                    view?.evaluateJavascript(
+                        "(function(){var b=document.body&&document.body.innerText;if(b&&b.indexOf('hx-houtiku-api')!==-1&&b.indexOf('\"status\":\"ok\"')!==-1)return 'API_JSON';return '';})()"
+                    ) { result ->
+                        if (result?.contains("API_JSON") == true) {
+                            Log.w("WebView", "Detected API JSON response at $url — clearing bad api_base")
+                            getSharedPreferences("hx_settings", Context.MODE_PRIVATE)
+                                .edit()
+                                .remove("api_base")
+                                .apply()
+                            view.loadUrl("file:///android_asset/index.html")
+                        }
+                    }
+                }
             }
 
             override fun shouldOverrideUrlLoading(
@@ -404,80 +420,6 @@ class MainActivity : AppCompatActivity() {
         fun requestNotification() {
             runOnUiThread {
                 requestNotificationPermissionIfNeeded()
-            }
-        }
-
-        /**
-         * Get FCM token asynchronously.
-         * Result is delivered via `window.__hxNativeFcmCallback(token)`.
-         */
-        @JavascriptInterface
-        fun getFcmToken() {
-            scope.launch {
-                try {
-                    val token = FirebaseMessaging.getInstance().token.await()
-                    withContext(Dispatchers.Main) {
-                        webView.evaluateJavascript(
-                            "window.__hxNativeFcmCallback && window.__hxNativeFcmCallback('$token')",
-                            null
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.e("HxBridge", "Failed to get FCM token", e)
-                    withContext(Dispatchers.Main) {
-                        webView.evaluateJavascript(
-                            "window.__hxNativeFcmCallback && window.__hxNativeFcmCallback(null)",
-                            null
-                        )
-                    }
-                }
-            }
-        }
-
-        /**
-         * Register FCM subscription with the backend.
-         * Called from JS after user configures their recipient token.
-         */
-        @JavascriptInterface
-        fun registerFcmPush(apiBase: String, recipientToken: String) {
-            // Cache credentials for FCM service background re-registration
-            getSharedPreferences("hx_settings", Context.MODE_PRIVATE)
-                .edit()
-                .putString("api_base", apiBase)
-                .putString("recipient_token", recipientToken)
-                .apply()
-
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val fcmToken = FirebaseMessaging.getInstance().token.await()
-                    val url = "${apiBase.trimEnd('/')}/api/subscribe"
-                    val body = """{"endpoint":"fcm://$fcmToken","keys":{"p256dh":"native-fcm","auth":"native-fcm"},"device_type":"android"}"""
-
-                    val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                    conn.requestMethod = "POST"
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.setRequestProperty("Authorization", "Bearer $recipientToken")
-                    conn.doOutput = true
-                    conn.outputStream.write(body.toByteArray())
-
-                    val code = conn.responseCode
-                    Log.d("HxBridge", "FCM push registered: HTTP $code")
-
-                    withContext(Dispatchers.Main) {
-                        webView.evaluateJavascript(
-                            "window.__hxNativeFcmRegisterCallback && window.__hxNativeFcmRegisterCallback($code)",
-                            null
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.e("HxBridge", "FCM push registration failed", e)
-                    withContext(Dispatchers.Main) {
-                        webView.evaluateJavascript(
-                            "window.__hxNativeFcmRegisterCallback && window.__hxNativeFcmRegisterCallback(0)",
-                            null
-                        )
-                    }
-                }
             }
         }
 

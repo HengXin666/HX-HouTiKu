@@ -3,16 +3,6 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
-// Apply google-services plugin only when google-services.json exists.
-// This allows the project to compile without Firebase credentials for development.
-val googleServicesFile = file("google-services.json")
-if (googleServicesFile.exists()) {
-    apply(plugin = libs.plugins.google.services.get().pluginId)
-} else {
-    logger.warn("⚠️  google-services.json not found — Firebase features will not work at runtime.")
-    logger.warn("   Copy google-services.json.example → google-services.json and fill in your Firebase values.")
-}
-
 android {
     namespace = "com.hxhoutiku.app"
     compileSdk = 35
@@ -100,16 +90,9 @@ dependencies {
     // Network — WebSocket client for background push
     implementation(libs.okhttp)
 
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.messaging)
-
-    // Coroutines (for FCM token async)
+    // Coroutines
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.coroutines.play.services)
 }
 
-configurations.all {
-    exclude(group = "org.jetbrains", module = "annotations-java5")
-}
+

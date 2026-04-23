@@ -106,7 +106,7 @@ export function Feed() {
           <div className="feed-stat-divider" />
           <div className="feed-stat">
             <CheckCircle2 style={{ width: 14, height: 14, color: "var(--color-priority-low)" }} />
-            <span className="feed-stat-label">CI ✅</span>
+            <span className="feed-stat-label">CI 通过</span>
           </div>
           <div className="feed-stat-divider" />
           <div className="feed-stat">

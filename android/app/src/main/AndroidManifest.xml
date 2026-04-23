@@ -40,15 +40,6 @@
             </intent-filter>
         </activity>
 
-        <!-- FCM Service -->
-        <service
-            android:name=".service.HxFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <!-- WebSocket Foreground Service — keeps persistent WS connection for background push -->
         <service
             android:name=".service.HxWebSocketService"
@@ -60,18 +51,5 @@
                 <action android:name="com.hxhoutiku.app.ws.UPDATE_CREDS" />
             </intent-filter>
         </service>
-
-        <!-- Notification channels metadata -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="hx_push_default" />
-
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_notification" />
-
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@color/notification_accent" />
     </application>
 </manifest>

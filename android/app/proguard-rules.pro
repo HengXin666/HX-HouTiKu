@@ -2,9 +2,6 @@
 #  HX-HouTiKu  —  ProGuard / R8 rules (WebView hybrid)
 # ============================================================
 
-# ── Firebase ─────────────────────────────────────────────────
--dontwarn com.google.firebase.**
-
 # ── Coroutines ───────────────────────────────────────────────
 -dontwarn kotlinx.coroutines.**
 
