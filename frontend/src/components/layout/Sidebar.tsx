@@ -4,7 +4,6 @@ import {
   Inbox,
   Star,
   FolderOpen,
-  Search,
   Settings,
   RefreshCw,
   Lock,
@@ -32,11 +31,6 @@ const NAV_ITEMS = [
     path: "/groups",
     label: "分组",
     icon: FolderOpen,
-  },
-  {
-    path: "/search",
-    label: "搜索",
-    icon: Search,
   },
   {
     path: "/settings",
