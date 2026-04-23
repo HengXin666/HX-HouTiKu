@@ -30,6 +30,7 @@ export interface Message {
   group_key: string;
   timestamp: number;
   is_read: boolean;
+  is_starred: boolean;
   tags: string[];
   /** "ws" | "sw" | "fetch" — where did this message enter the store */
   source?: string;
@@ -59,6 +60,7 @@ interface MessageState {
   removeMessages: (ids: string[]) => void;
   markRead: (token: string, ids: string[]) => Promise<void>;
   deleteMessage: (token: string, ids: string[]) => Promise<void>;
+  toggleStar: (id: string) => void;
   setActiveTab: (tab: string) => void;
   setActiveGroup: (group: string | null) => void;
   clear: () => void;
@@ -82,6 +84,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           tags: m.tags ?? [],
           channel_id: m.channel_id ?? "default",
           group_key: m.group_key ?? "",
+          is_starred: false,
           source: "cache",
         })),
       });
@@ -111,6 +114,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             group_key: enc.group_key ?? "",
             timestamp: enc.timestamp,
             is_read: enc.is_read,
+            is_starred: false,
             tags: plain.tags ?? [],
             source: "fetch",
           });
@@ -126,6 +130,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             group_key: enc.group_key ?? "",
             timestamp: enc.timestamp,
             is_read: enc.is_read,
+            is_starred: false,
             tags: [],
             source: "fetch",
           });
@@ -245,6 +250,14 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         totalUnread: Math.max(0, state.totalUnread - unreadRemoved),
       };
     });
+  },
+
+  toggleStar: (id) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === id ? { ...m, is_starred: !m.is_starred } : m
+      ),
+    }));
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),

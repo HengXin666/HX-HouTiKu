@@ -10,8 +10,10 @@ import { useMessageStore } from "@/stores/message-store";
 import { cn } from "@/lib/utils";
 
 const TITLES: Record<string, string> = {
-  "/": "信息流",
+  "/": "收件箱",
   "/groups": "分组",
+  "/starred": "收藏",
+  "/search": "搜索",
   "/settings": "设置",
 };
 
@@ -23,7 +25,7 @@ export function Header() {
 
   const isDetail =
     location.pathname.startsWith("/message/") ||
-    location.pathname.startsWith("/groups/") ||
+    (location.pathname.startsWith("/groups/") && location.pathname !== "/groups") ||
     location.pathname.startsWith("/clone");
   const isGroupDetail = location.pathname.startsWith("/groups/") && location.pathname !== "/groups";
 
@@ -38,8 +40,12 @@ export function Header() {
     title = "设备克隆";
   }
 
+  const showOnMobile = isDetail ||
+    location.pathname === "/starred" ||
+    location.pathname === "/search";
+
   return (
-    <header className={cn("app-header", !isDetail && "app-header--hide-mobile")}>
+    <header className={cn("app-header", !showOnMobile && "app-header--hide-mobile")}>
       <div className="app-header-inner">
         <div className="app-header-left">
           {isDetail ? (

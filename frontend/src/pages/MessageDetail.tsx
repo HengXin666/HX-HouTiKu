@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Toast } from "@/components/ui/Toast";
 import { Dialog } from "@/components/ui/Dialog";
-import { Check, Copy, Clock, ArrowLeft, Trash2 } from "lucide-react";
+import { Check, Copy, Clock, ArrowLeft, Trash2, Star } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
 import { PriorityBadge } from "@/components/message/PriorityBadge";
@@ -25,6 +25,7 @@ export function MessageDetail() {
   const messages = useMessageStore((s) => s.messages);
   const markRead = useMessageStore((s) => s.markRead);
   const deleteMessage = useMessageStore((s) => s.deleteMessage);
+  const toggleStar = useMessageStore((s) => s.toggleStar);
   const [format, setFormat] = useState<ContentFormat>("auto");
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -138,6 +139,26 @@ export function MessageDetail() {
 
       {/* Actions */}
       <div className="msg-detail-actions">
+        <button
+          onClick={() => {
+            toggleStar(message.id);
+            Toast.show({
+              content: message.is_starred ? "已取消收藏" : "已收藏",
+              position: "bottom",
+            });
+          }}
+          className={cn(
+            "msg-detail-action-btn",
+            message.is_starred && "msg-detail-action-btn--starred"
+          )}
+        >
+          <Star style={{
+            width: 16,
+            height: 16,
+            fill: message.is_starred ? "currentColor" : "none",
+          }} />
+          {message.is_starred ? "已收藏" : "收藏"}
+        </button>
         {!message.is_read && recipientToken && (
           <button
             onClick={() => markRead(recipientToken, [message.id])}

@@ -92,6 +92,7 @@ export function useMessageReceiver() {
           group_key: payload.group_key ?? "",
           timestamp: payload.timestamp,
           is_read: false,
+          is_starred: false,
           tags: plain.tags ?? [],
           source,
         };

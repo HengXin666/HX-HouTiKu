@@ -1,8 +1,10 @@
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
   Shield,
-  Home,
+  Inbox,
+  Star,
   FolderOpen,
+  Search,
   Settings,
   RefreshCw,
   Lock,
@@ -18,13 +20,23 @@ import type { WsStatus } from "@/lib/ws-manager";
 const NAV_ITEMS = [
   {
     path: "/",
-    label: "信息流",
-    icon: Home,
+    label: "收件箱",
+    icon: Inbox,
+  },
+  {
+    path: "/starred",
+    label: "收藏",
+    icon: Star,
   },
   {
     path: "/groups",
     label: "分组",
     icon: FolderOpen,
+  },
+  {
+    path: "/search",
+    label: "搜索",
+    icon: Search,
   },
   {
     path: "/settings",
@@ -43,6 +55,7 @@ export function Sidebar({ wsStatus, deviceCount }: SidebarProps) {
   const navigate = useNavigate();
   const deviceName = useAuthStore((s) => s.deviceName);
   const totalUnread = useMessageStore((s) => s.totalUnread);
+  const starredCount = useMessageStore((s) => s.messages.filter((m) => m.is_starred).length);
   const lock = useAuthStore((s) => s.lock);
 
   return (
@@ -64,7 +77,9 @@ export function Sidebar({ wsStatus, deviceCount }: SidebarProps) {
           const isActive =
             path === "/"
               ? location.pathname === "/" || location.pathname.startsWith("/message")
-              : location.pathname.startsWith(path);
+              : path === "/groups"
+                ? location.pathname.startsWith("/groups")
+                : location.pathname === path;
 
           return (
             <Link
@@ -83,6 +98,9 @@ export function Sidebar({ wsStatus, deviceCount }: SidebarProps) {
               </div>
               {path === "/" && totalUnread > 0 && (
                 <span className="sidebar-badge">{totalUnread > 99 ? "99+" : totalUnread}</span>
+              )}
+              {path === "/starred" && starredCount > 0 && (
+                <span className="sidebar-badge">{starredCount > 99 ? "99+" : starredCount}</span>
               )}
             </Link>
           );

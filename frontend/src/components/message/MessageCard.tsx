@@ -51,10 +51,8 @@ export function MessageCard({
       onClick={() => navigate(`/message/${id}`)}
       className={cn("msg-card", is_read && "msg-card--read")}
     >
-      {/* Left: priority indicator circle with SVG icon */}
-      <div className={cn("msg-card-indicator", `msg-card-indicator--${priority}`)}>
-        <PriorityIcon style={{ width: 20, height: 20 }} />
-      </div>
+      {/* Left: priority vertical bar */}
+      <div className={cn("msg-card-bar", `msg-card-bar--${priority}`)} />
 
       {/* Right: content */}
       <div className="msg-card-content">
@@ -65,6 +63,7 @@ export function MessageCard({
           {showUrgentLabel && (
             <>
               <span className="msg-card-dot" />
+              <PriorityIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
               <span className={cn("msg-card-priority-label", `msg-card-priority-label--${priority}`)}>
                 {config.label}
               </span>

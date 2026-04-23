@@ -1,12 +1,13 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, FolderOpen, Settings, Wifi, WifiOff } from "lucide-react";
+import { Inbox, Star, Search, Settings, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMessageStore } from "@/stores/message-store";
 import type { WsStatus } from "@/lib/ws-manager";
 
 const TABS = [
-  { path: "/", label: "信息流", icon: Home },
-  { path: "/groups", label: "分组", icon: FolderOpen },
+  { path: "/", label: "收件", icon: Inbox },
+  { path: "/starred", label: "收藏", icon: Star },
+  { path: "/search", label: "搜索", icon: Search },
   { path: "/settings", label: "设置", icon: Settings },
 ] as const;
 
@@ -45,8 +46,10 @@ export function BottomNav({ wsStatus }: BottomNavProps) {
             path === "/"
               ? location.pathname === "/" ||
                 location.pathname.startsWith("/message") ||
-                (location.pathname.startsWith("/groups/") && location.pathname !== "/groups")
-              : location.pathname === path;
+                location.pathname.startsWith("/groups")
+              : path === "/starred"
+                ? location.pathname === "/starred"
+                : location.pathname === path;
 
           return (
             <button
