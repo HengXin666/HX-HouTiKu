@@ -23,5 +23,5 @@ new_sqlite_classes = ["MessageRelay"]
 ENCRYPTION_CURVE = "secp256k1"
 
 routes = [
-  { pattern = "houtiku.api.woa.qzz.io", custom_domain = true }
+  { pattern = "houtiku-api.woa.qzz.io", custom_domain = true }
 ]
