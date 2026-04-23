@@ -31,7 +31,12 @@ export interface WsNewMessagePayload {
   is_read: boolean;
 }
 
+export interface WsDeletePayload {
+  message_ids: string[];
+}
+
 type MessageListener = (msg: WsNewMessagePayload) => void;
+type DeleteListener = (payload: WsDeletePayload) => void;
 type StatusListener = (status: WsStatus, deviceCount: number) => void;
 
 // ─── Constants ───────────────────────────────────────────────
@@ -56,6 +61,7 @@ let hiddenSince: number | null = null;
 let initialized = false;
 
 const messageListeners = new Set<MessageListener>();
+const deleteListeners = new Set<DeleteListener>();
 const statusListeners = new Set<StatusListener>();
 
 // ─── Internal helpers ────────────────────────────────────────
@@ -208,6 +214,12 @@ export function wsDestroy() {
 export function wsOnMessage(fn: MessageListener): () => void {
   messageListeners.add(fn);
   return () => { messageListeners.delete(fn); };
+}
+
+/** Subscribe to message_deleted events. Returns unsubscribe function. */
+export function wsOnDelete(fn: DeleteListener): () => void {
+  deleteListeners.add(fn);
+  return () => { deleteListeners.delete(fn); };
 }
 
 /** Subscribe to status changes. Returns unsubscribe function. */
