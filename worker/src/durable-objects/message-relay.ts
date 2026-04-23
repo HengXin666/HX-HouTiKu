@@ -38,6 +38,7 @@ type ServerMessage =
         group_key?: string;
       };
     }
+  | { type: "message_deleted"; message_ids: string[] }
   | { type: "pong" }
   | { type: "connected"; device_count: number }
   | { type: "error"; message: string };

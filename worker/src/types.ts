@@ -132,6 +132,12 @@ export interface WsNewMessage {
   };
 }
 
+/** WebSocket message types (server → client): delete sync */
+export interface WsDeleteMessage {
+  type: "message_deleted";
+  message_ids: string[];
+}
+
 export interface ChannelCreateRequest {
   name: string;
   display_name: string;

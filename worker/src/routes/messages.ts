@@ -83,7 +83,7 @@ const markReadHandler = async (c: Context<{ Bindings: Env; Variables: { recipien
 app.put("/read", markRead, markReadHandler);
 app.post("/read", markRead, markReadHandler);
 
-// DELETE /api/messages — permanently delete messages
+// DELETE /api/messages — permanently delete messages + sync to other devices
 app.delete("/", authRecipientToken(), async (c) => {
   const { message_ids } = await c.req.json<{ message_ids: string[] }>();
 
@@ -95,6 +95,29 @@ app.delete("/", authRecipientToken(), async (c) => {
   await c.env.DB.prepare(
     `DELETE FROM messages WHERE id IN (${placeholders})`
   ).bind(...message_ids).run();
+
+  // Broadcast delete event to all online devices via DO WebSocket
+  const allRecipients = await c.env.DB.prepare(
+    "SELECT id FROM recipients WHERE is_active = 1"
+  ).all<{ id: string }>();
+
+  const deletePayload = { type: "message_deleted" as const, message_ids };
+
+  await Promise.all(
+    allRecipients.results.map(async (r) => {
+      try {
+        const doId = c.env.MESSAGE_RELAY.idFromName(r.id);
+        const stub = c.env.MESSAGE_RELAY.get(doId);
+        await stub.fetch("https://do-internal/broadcast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(deletePayload),
+        });
+      } catch {
+        // DO broadcast failure is non-critical
+      }
+    })
+  );
 
   return c.json({ deleted: message_ids.length });
 });

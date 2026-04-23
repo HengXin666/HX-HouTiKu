@@ -105,7 +105,7 @@ npx wrangler deploy                       # 部署!
 
 ```bash
 cd frontend && pnpm install
-echo 'VITE_API_BASE=https://houtiku.api.woa.qzz.io' > .env.production
+echo 'VITE_API_BASE=https://houtiku-api.woa.qzz.io' > .env.production
 pnpm build
 npx wrangler pages deploy dist --project-name hx-houtiku
 ```

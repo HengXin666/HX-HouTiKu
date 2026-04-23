@@ -15,6 +15,7 @@ import { useMessageStore, type Message } from "@/stores/message-store";
 import { useWebSocket } from "./use-websocket";
 import {
   wsOnMessage,
+  wsOnDelete,
   wsWasStale,
   type WsNewMessagePayload,
 } from "@/lib/ws-manager";
@@ -59,6 +60,7 @@ export function useMessageReceiver() {
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
   const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
   const addMessage = useMessageStore((s) => s.addMessage);
+  const removeMessages = useMessageStore((s) => s.removeMessages);
   const loadCached = useMessageStore((s) => s.loadCached);
 
   // Refs to keep callbacks stable
@@ -68,6 +70,8 @@ export function useMessageReceiver() {
   tokenRef.current = recipientToken;
   const addRef = useRef(addMessage);
   addRef.current = addMessage;
+  const removeRef = useRef(removeMessages);
+  removeRef.current = removeMessages;
   const fetchRef = useRef(fetchAndDecrypt);
   fetchRef.current = fetchAndDecrypt;
 
@@ -104,6 +108,13 @@ export function useMessageReceiver() {
   useEffect(() => {
     return wsOnMessage((payload) => decryptAndInsert(payload, "ws"));
   }, [decryptAndInsert]);
+
+  // Layer 1b: WS delete sync — remove messages deleted by other devices
+  useEffect(() => {
+    return wsOnDelete((payload) => {
+      removeRef.current(payload.message_ids);
+    });
+  }, []);
 
   // Layer 2: Service Worker push
   useEffect(() => {

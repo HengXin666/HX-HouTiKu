@@ -130,6 +130,15 @@ export async function markCachedRead(ids: string[]): Promise<void> {
   await tx.done;
 }
 
+export async function deleteCachedMessages(ids: string[]): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction("messages", "readwrite");
+  for (const id of ids) {
+    await tx.store.delete(id);
+  }
+  await tx.done;
+}
+
 export async function clearMessages(): Promise<void> {
   const db = await getDB();
   await db.clear("messages");

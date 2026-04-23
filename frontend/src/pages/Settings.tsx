@@ -181,7 +181,7 @@ export function Settings() {
                   type="url"
                   value={apiInput}
                   onChange={(e) => setApiInput(e.target.value)}
-                  placeholder="https://houtiku.api.woa.qzz.io"
+                  placeholder="https://houtiku-api.woa.qzz.io"
                   className="settings-field-input"
                   autoFocus
                 />

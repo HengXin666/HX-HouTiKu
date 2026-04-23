@@ -129,6 +129,8 @@ async function doConnect() {
         const data = JSON.parse(ev.data);
         if (data.type === "new_message" && data.message) {
           for (const fn of messageListeners) fn(data.message);
+        } else if (data.type === "message_deleted" && data.message_ids) {
+          for (const fn of deleteListeners) fn({ message_ids: data.message_ids });
         } else if (data.type === "connected") {
           deviceCount = data.device_count ?? 1;
           for (const fn of statusListeners) fn(status, deviceCount);

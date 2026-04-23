@@ -42,7 +42,7 @@ export HX_HOUTIKU_TOKEN="your-api-token"
 
 ```yaml
 # ~/.hx-houtiku.yaml
-endpoint: https://houtiku.api.woa.qzz.io
+endpoint: https://houtiku-api.woa.qzz.io
 api_token: your-api-token
 # recipients: optional, auto-fetched if omitted
 defaults:

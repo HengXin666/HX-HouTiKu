@@ -394,7 +394,7 @@ def full_init(root: Path, worker_dir: Path, cfg: dict[str, str], has_gh: bool) -
 
     # 3. 域名
     heading("配置域名")
-    api_domain = ask("后端 API 域名", _domain_from_url(cfg.get("API_URL", "")) or "houtiku.api.woa.qzz.io")
+    api_domain = ask("后端 API 域名", _domain_from_url(cfg.get("API_URL", "")) or "houtiku-api.woa.qzz.io")
     frontend_domain = ask("前端域名", _domain_from_url(cfg.get("FRONTEND_URL", "")) or "houtiku.woa.qzz.io")
     cfg["API_URL"] = f"https://{api_domain}"
     cfg["FRONTEND_URL"] = f"https://{frontend_domain}"

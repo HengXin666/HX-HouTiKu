@@ -17,6 +17,7 @@ import {
   cacheMessages,
   getCachedMessages,
   markCachedRead,
+  deleteCachedMessages,
 } from "@/lib/db";
 
 export interface Message {
@@ -54,6 +55,8 @@ interface MessageState {
   ) => Promise<void>;
   /** Insert a single already-decrypted message. Deduplicates by id. */
   addMessage: (msg: Message) => void;
+  /** Remove messages by id (from remote delete sync). */
+  removeMessages: (ids: string[]) => void;
   markRead: (token: string, ids: string[]) => Promise<void>;
   deleteMessage: (token: string, ids: string[]) => Promise<void>;
   setActiveTab: (tab: string) => void;
@@ -200,6 +203,22 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       is_read: msg.is_read,
       tags: msg.tags,
     }]).catch(() => {});
+  },
+
+  removeMessages: (ids) => {
+    const idSet = new Set(ids);
+    set((state) => {
+      const unreadRemoved = state.messages.filter(
+        (m) => idSet.has(m.id) && !m.is_read
+      ).length;
+      return {
+        messages: state.messages.filter((m) => !idSet.has(m.id)),
+        totalUnread: Math.max(0, state.totalUnread - unreadRemoved),
+      };
+    });
+
+    // Clean IndexedDB cache in background
+    deleteCachedMessages(ids).catch(() => {});
   },
 
   markRead: async (token, ids) => {
