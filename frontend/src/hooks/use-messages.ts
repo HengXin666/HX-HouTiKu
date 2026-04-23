@@ -16,6 +16,7 @@ import { useWebSocket } from "./use-websocket";
 import {
   wsOnMessage,
   wsOnDelete,
+  wsOnStarSync,
   wsWasStale,
   type WsNewMessagePayload,
 } from "@/lib/ws-manager";
@@ -61,6 +62,8 @@ export function useMessageReceiver() {
   const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
   const addMessage = useMessageStore((s) => s.addMessage);
   const removeMessages = useMessageStore((s) => s.removeMessages);
+  const applyStarSync = useMessageStore((s) => s.applyStarSync);
+  const syncStarredFromServer = useMessageStore((s) => s.syncStarredFromServer);
   const loadCached = useMessageStore((s) => s.loadCached);
 
   // Refs to keep callbacks stable
@@ -72,6 +75,8 @@ export function useMessageReceiver() {
   addRef.current = addMessage;
   const removeRef = useRef(removeMessages);
   removeRef.current = removeMessages;
+  const starSyncRef = useRef(applyStarSync);
+  starSyncRef.current = applyStarSync;
   const fetchRef = useRef(fetchAndDecrypt);
   fetchRef.current = fetchAndDecrypt;
 
@@ -114,6 +119,13 @@ export function useMessageReceiver() {
   useEffect(() => {
     return wsOnDelete((payload) => {
       removeRef.current(payload.message_ids);
+    });
+  }, []);
+
+  // Layer 1c: WS star sync — apply star changes from other devices
+  useEffect(() => {
+    return wsOnStarSync((payload) => {
+      starSyncRef.current(payload.message_ids, payload.starred);
     });
   }, []);
 

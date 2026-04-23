@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS messages (
     group_key TEXT DEFAULT '',
     timestamp INTEGER NOT NULL,
     is_read INTEGER DEFAULT 0,
+    is_starred INTEGER DEFAULT 0,
     delivered_at INTEGER DEFAULT 0,
     expires_at INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,

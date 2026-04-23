@@ -11,7 +11,7 @@
 
 import { create } from "zustand";
 import { fetchMessages } from "@/lib/api";
-import { markAsRead, deleteMessages } from "@/lib/api";
+import { markAsRead, deleteMessages, setMessageStarred, getStarredIds } from "@/lib/api";
 import { decryptMessage } from "@/lib/crypto";
 import {
   cacheMessages,
@@ -60,7 +60,11 @@ interface MessageState {
   removeMessages: (ids: string[]) => void;
   markRead: (token: string, ids: string[]) => Promise<void>;
   deleteMessage: (token: string, ids: string[]) => Promise<void>;
-  toggleStar: (id: string) => void;
+  toggleStar: (token: string, id: string) => void;
+  /** Apply star sync from WebSocket (remote device toggled star). */
+  applyStarSync: (ids: string[], starred: boolean) => void;
+  /** Fetch starred IDs from server and apply them to local state. */
+  syncStarredFromServer: (token: string) => Promise<void>;
   setActiveTab: (tab: string) => void;
   setActiveGroup: (group: string | null) => void;
   clear: () => void;
@@ -114,7 +118,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             group_key: enc.group_key ?? "",
             timestamp: enc.timestamp,
             is_read: enc.is_read,
-            is_starred: false,
+            is_starred: (enc as any).is_starred ?? false,
             tags: plain.tags ?? [],
             source: "fetch",
           });
@@ -130,7 +134,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             group_key: enc.group_key ?? "",
             timestamp: enc.timestamp,
             is_read: enc.is_read,
-            is_starred: false,
+            is_starred: (enc as any).is_starred ?? false,
             tags: [],
             source: "fetch",
           });
@@ -252,12 +256,52 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     });
   },
 
-  toggleStar: (id) => {
+  toggleStar: (token, id) => {
+    const msg = get().messages.find((m) => m.id === id);
+    if (!msg) return;
+    const newStarred = !msg.is_starred;
+
+    // Optimistic update
     set((state) => ({
       messages: state.messages.map((m) =>
-        m.id === id ? { ...m, is_starred: !m.is_starred } : m
+        m.id === id ? { ...m, is_starred: newStarred } : m
       ),
     }));
+
+    // Sync to server
+    setMessageStarred(token, [id], newStarred).catch((err) => {
+      console.error("Failed to sync star:", err);
+      // Revert on failure
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m.id === id ? { ...m, is_starred: !newStarred } : m
+        ),
+      }));
+    });
+  },
+
+  applyStarSync: (ids, starred) => {
+    const idSet = new Set(ids);
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        idSet.has(m.id) ? { ...m, is_starred: starred } : m
+      ),
+    }));
+  },
+
+  syncStarredFromServer: async (token) => {
+    try {
+      const { starred_ids } = await getStarredIds(token);
+      const idSet = new Set(starred_ids);
+      set((state) => ({
+        messages: state.messages.map((m) => ({
+          ...m,
+          is_starred: idSet.has(m.id),
+        })),
+      }));
+    } catch (err) {
+      console.error("Failed to sync starred from server:", err);
+    }
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),

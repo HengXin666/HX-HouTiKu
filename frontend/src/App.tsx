@@ -9,7 +9,6 @@ import { GroupView } from "@/pages/GroupView";
 import { MessageDetail } from "@/pages/MessageDetail";
 import { Settings } from "@/pages/Settings";
 import { CloneDevice } from "@/pages/CloneDevice";
-import { SearchPage } from "@/pages/SearchPage";
 import { StarredPage } from "@/pages/StarredPage";
 import { AppShell } from "@/components/layout/AppShell";
 import { registerPushSubscription } from "@/lib/push";
@@ -88,7 +87,6 @@ function AppContent({ status }: { status: string }) {
         <Route path="/groups" element={<GroupView />} />
         <Route path="/groups/:groupName" element={<Feed />} />
         <Route path="/starred" element={<StarredPage />} />
-        <Route path="/search" element={<SearchPage />} />
         <Route path="/message/:id" element={<MessageDetail />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/clone" element={<CloneDevice />} />

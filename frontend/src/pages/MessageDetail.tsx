@@ -141,7 +141,8 @@ export function MessageDetail() {
       <div className="msg-detail-actions">
         <button
           onClick={() => {
-            toggleStar(message.id);
+            if (!recipientToken) return;
+            toggleStar(recipientToken, message.id);
             Toast.show({
               content: message.is_starred ? "已取消收藏" : "已收藏",
               position: "bottom",

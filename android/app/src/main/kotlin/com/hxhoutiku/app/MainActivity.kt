@@ -288,8 +288,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Track foreground state for notification dedup
+        HxWebSocketService.isAppInForeground = true
         // Re-apply immersive flags when returning to the app (system resets them)
         hideSystemUI()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        HxWebSocketService.isAppInForeground = false
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

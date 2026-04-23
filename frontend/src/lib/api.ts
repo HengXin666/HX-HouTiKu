@@ -120,6 +120,24 @@ export function deleteMessages(
   });
 }
 
+export function setMessageStarred(
+  token: string,
+  messageIds: string[],
+  starred: boolean
+): Promise<{ updated: number; starred: boolean }> {
+  return request("/api/messages/starred", {
+    method: "PUT",
+    token,
+    body: JSON.stringify({ message_ids: messageIds, starred }),
+  });
+}
+
+export function getStarredIds(
+  token: string
+): Promise<{ starred_ids: string[] }> {
+  return request("/api/messages/starred", { token });
+}
+
 export interface ConfigResponse {
   vapid_public_key: string;
   version: string;

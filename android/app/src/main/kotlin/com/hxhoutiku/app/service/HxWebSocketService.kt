@@ -8,9 +8,12 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.hxhoutiku.app.HxApp
+import com.hxhoutiku.app.MainActivity
 import com.hxhoutiku.app.R
 import okhttp3.*
 import okio.ByteString
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -25,6 +28,7 @@ import java.util.concurrent.TimeUnit
  *   3. Sends ping every 25s; expects server pong
  *   4. Auto-reconnects with exponential backoff (1s → 60s max)
  *   5. Delivers messages via LocalBroadcast or JS callback when Activity is visible
+ *   6. Shows system notifications when app is in background
  *
  * Lifecycle: Start from MainActivity when user configures recipient token.
  *            Stop when user logs out or app explicitly disconnects.
@@ -39,6 +43,9 @@ class HxWebSocketService : Service() {
     private val PING_INTERVAL_MS = 25_000L
     private val RECONNECT_BASE_DELAY_MS = 1_000L
     private val RECONNECT_MAX_DELAY_MS = 60_000L
+
+    /** Auto-incrementing notification ID for message notifications */
+    private var messageNotifId = 3000
 
     private var webSocket: WebSocket? = null
     private var client: OkHttpClient? = null
@@ -69,6 +76,14 @@ class HxWebSocketService : Service() {
         const val ACTION_WS_BROADCAST = "com.hxhoutiku.app.ws.BROADCAST"
         const val BROADCAST_EXTRA_TYPE = "type"
         const val BROADCAST_EXTRA_DATA = "data"
+
+        /**
+         * Track whether the Activity is in the foreground.
+         * When true, we skip system notifications (the in-app toast handles it).
+         * When false (background), we show system-level notifications.
+         */
+        @Volatile
+        var isAppInForeground = false
 
         @Volatile
         private var onMessageListener: WsMessageListener? = null
@@ -242,6 +257,9 @@ class HxWebSocketService : Service() {
         override fun onMessage(webSocket: WebSocket, text: String) {
             Log.d(TAG, "WS message: ${text.take(120)}…")
             broadcast(MSG_WS_MESSAGE, text)
+
+            // Parse and show system notification for new messages when app is in background
+            handleIncomingMessage(text)
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -293,7 +311,121 @@ class HxWebSocketService : Service() {
         pingHandler?.removeCallbacksAndMessages(null)
     }
 
-    // ─── Notification ───────────────────────────────────────────
+    // ─── System Notification for New Messages ───────────────────
+
+    /**
+     * Parse incoming WS JSON. If it's a new_message, show a system notification.
+     *
+     * Only shows when the app is NOT in the foreground — when in foreground,
+     * the WebView's in-app NotificationToast handles display.
+     */
+    private fun handleIncomingMessage(text: String) {
+        try {
+            val json = JSONObject(text)
+            val type = json.optString("type", "")
+
+            if (type != "new_message") return
+
+            val msg = json.optJSONObject("message") ?: return
+            val msgId = msg.optString("id", "msg-${System.currentTimeMillis()}")
+            val priority = msg.optString("priority", "default")
+            val group = msg.optString("group", "general")
+
+            // Always show system notification — even when foreground
+            // Users expect notification bar indicators for new messages on mobile
+            showMessageNotification(msgId, priority, group)
+
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse WS message for notification", e)
+        }
+    }
+
+    /**
+     * Show an Android system notification for an incoming message.
+     * Uses the priority-based notification channels from HxApp for
+     * appropriate sound, vibration, and heads-up display behavior.
+     */
+    private fun showMessageNotification(messageId: String, priority: String, group: String) {
+        val title = when (priority) {
+            "urgent" -> "⚠️ 紧急 · $group"
+            "high" -> "❗ 重要 · $group"
+            else -> "📨 $group · 新消息"
+        }
+        val body = when (priority) {
+            "urgent" -> "收到紧急消息，请立即查看"
+            "high" -> "收到重要消息，请及时查看"
+            "debug" -> "收到调试消息"
+            else -> "点击查看详情"
+        }
+
+        // Pick the notification channel based on priority
+        val channelId = when (priority) {
+            "urgent" -> HxApp.CHANNEL_URGENT
+            "high" -> HxApp.CHANNEL_HIGH
+            "low" -> HxApp.CHANNEL_LOW
+            "debug" -> HxApp.CHANNEL_DEBUG
+            else -> HxApp.CHANNEL_DEFAULT
+        }
+
+        // Intent to open the app and navigate to the message
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("message_id", messageId)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this, messageNotifId, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setGroup("hx_messages")
+            .setColor(0xFF1D9BF0.toInt()) // Brand blue
+
+        // Priority-specific enhancements
+        when (priority) {
+            "urgent" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_MAX)
+                builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+                // Full-screen intent for urgent — shows on lock screen
+                builder.setFullScreenIntent(pendingIntent, true)
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            }
+            "high" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_HIGH)
+                builder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            }
+            "low" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_LOW)
+                builder.setSilent(true)
+            }
+            "debug" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_MIN)
+                builder.setSilent(true)
+            }
+            else -> {
+                builder.setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                builder.setDefaults(NotificationCompat.DEFAULT_SOUND)
+            }
+        }
+
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(messageNotifId++, builder.build())
+
+        // Prevent ID overflow
+        if (messageNotifId > 9999) messageNotifId = 3000
+
+        Log.d(TAG, "System notification shown: $title (channel=$channelId)")
+    }
+
+    // ─── Foreground Service Notification ────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -35,8 +35,14 @@ export interface WsDeletePayload {
   message_ids: string[];
 }
 
+export interface WsStarSyncPayload {
+  message_ids: string[];
+  starred: boolean;
+}
+
 type MessageListener = (msg: WsNewMessagePayload) => void;
 type DeleteListener = (payload: WsDeletePayload) => void;
+type StarSyncListener = (payload: WsStarSyncPayload) => void;
 type StatusListener = (status: WsStatus, deviceCount: number) => void;
 
 // ─── Constants ───────────────────────────────────────────────
@@ -62,6 +68,7 @@ let initialized = false;
 
 const messageListeners = new Set<MessageListener>();
 const deleteListeners = new Set<DeleteListener>();
+const starSyncListeners = new Set<StarSyncListener>();
 const statusListeners = new Set<StatusListener>();
 
 // ─── Internal helpers ────────────────────────────────────────
@@ -137,6 +144,8 @@ async function doConnect() {
           for (const fn of messageListeners) fn(data.message);
         } else if (data.type === "message_deleted" && data.message_ids) {
           for (const fn of deleteListeners) fn({ message_ids: data.message_ids });
+        } else if (data.type === "star_sync" && data.message_ids) {
+          for (const fn of starSyncListeners) fn({ message_ids: data.message_ids, starred: data.starred });
         } else if (data.type === "connected") {
           deviceCount = data.device_count ?? 1;
           for (const fn of statusListeners) fn(status, deviceCount);
@@ -220,6 +229,12 @@ export function wsOnMessage(fn: MessageListener): () => void {
 export function wsOnDelete(fn: DeleteListener): () => void {
   deleteListeners.add(fn);
   return () => { deleteListeners.delete(fn); };
+}
+
+/** Subscribe to star_sync events. Returns unsubscribe function. */
+export function wsOnStarSync(fn: StarSyncListener): () => void {
+  starSyncListeners.add(fn);
+  return () => { starSyncListeners.delete(fn); };
 }
 
 /** Subscribe to status changes. Returns unsubscribe function. */

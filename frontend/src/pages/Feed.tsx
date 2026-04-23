@@ -12,6 +12,8 @@ import {
   Bug,
   Wifi,
   WifiOff as WifiDisconnected,
+  CheckCircle2,
+  Bell,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
@@ -35,7 +37,6 @@ export function Feed() {
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
 
-  // Use the unified hook for fetching + WebSocket + push integration
   const { messages, loading, refresh, wsStatus } = useMessages();
 
   const error = useMessageStore((s) => s.error);
@@ -54,6 +55,15 @@ export function Feed() {
   const scopedMsgs = groupName
     ? messages.filter((m) => m.group === groupName)
     : messages;
+
+  // Stats for status bar
+  const today = new Date();
+  const todayCount = messages.filter((m) => {
+    const d = new Date(m.timestamp);
+    return d.toDateString() === today.toDateString();
+  }).length;
+  const unreadCount = messages.filter((m) => !m.is_read).length;
+  const urgentCount = messages.filter((m) => m.priority === "urgent" && !m.is_read).length;
 
   const counts: Record<string, number> = {
     all: scopedMsgs.length,
@@ -81,41 +91,54 @@ export function Feed() {
 
   return (
     <div className="feed-container">
-      {/* Group title */}
+      {/* Group title (only when viewing a specific group) */}
       {groupName && (
         <h2 className="feed-group-title">{groupName}</h2>
       )}
 
-      {/* WebSocket status + stats bar */}
-      <div className="feed-status-bar">
-        <div className={cn(
-          "feed-ws-status",
-          wsStatus === "connected" && "feed-ws-status--connected",
-          wsStatus === "connecting" && "feed-ws-status--connecting",
-          (wsStatus === "disconnected" || wsStatus === "idle") && "feed-ws-status--disconnected",
-        )}>
-          {wsStatus === "connected" ? (
-            <Wifi style={{ width: 14, height: 14 }} />
-          ) : (
-            <WifiDisconnected style={{ width: 14, height: 14 }} />
-          )}
-          <span>
-            {wsStatus === "connected" ? "实时连接" : wsStatus === "connecting" ? "连接中..." : "离线"}
-          </span>
+      {/* ── Dashboard status bar (kanban style) ── */}
+      <div className="feed-dashboard">
+        <div className="feed-dashboard-stats">
+          <div className="feed-stat">
+            <span className="feed-stat-value">{todayCount}</span>
+            <span className="feed-stat-label">今日</span>
+          </div>
+          <div className="feed-stat-divider" />
+          <div className="feed-stat">
+            <CheckCircle2 style={{ width: 14, height: 14, color: "var(--color-priority-low)" }} />
+            <span className="feed-stat-label">CI ✅</span>
+          </div>
+          <div className="feed-stat-divider" />
+          <div className="feed-stat">
+            <Bell style={{ width: 14, height: 14, color: urgentCount > 0 ? "var(--color-priority-urgent)" : "var(--color-muted-foreground)" }} />
+            <span className="feed-stat-value" style={urgentCount > 0 ? { color: "var(--color-priority-urgent)" } : undefined}>
+              {urgentCount}
+            </span>
+            <span className="feed-stat-label">告警</span>
+          </div>
+          <div className="feed-stat-divider" />
+          <div className={cn(
+            "feed-ws-pill",
+            wsStatus === "connected" && "feed-ws-pill--connected",
+            wsStatus === "connecting" && "feed-ws-pill--connecting",
+            (wsStatus === "disconnected" || wsStatus === "idle") && "feed-ws-pill--disconnected",
+          )}>
+            {wsStatus === "connected" ? (
+              <Wifi style={{ width: 12, height: 12 }} />
+            ) : (
+              <WifiDisconnected style={{ width: 12, height: 12 }} />
+            )}
+            <span>{wsStatus === "connected" ? "在线" : wsStatus === "connecting" ? "连接中" : "离线"}</span>
+          </div>
         </div>
-        <span className="feed-status-count">
-          今日 {messages.filter((m) => {
-            const today = new Date();
-            const d = new Date(m.timestamp);
-            return d.toDateString() === today.toDateString();
-          }).length} 条
-          {messages.filter((m) => !m.is_read).length > 0 && (
-            <> · <strong>{messages.filter((m) => !m.is_read).length} 未读</strong></>
-          )}
-        </span>
+        {unreadCount > 0 && (
+          <div className="feed-dashboard-unread">
+            <strong>{unreadCount}</strong> 未读
+          </div>
+        )}
       </div>
 
-      {/* Priority filter tabs */}
+      {/* ── Horizontal scrolling category tabs ── */}
       <div className="feed-tabs">
         {TABS.map(({ key, label, icon: Icon }) => {
           const count = counts[key] ?? 0;
@@ -154,7 +177,7 @@ export function Feed() {
         </div>
       )}
 
-      {/* Message list */}
+      {/* Message list with time grouping */}
       <MessageList messages={filtered} loading={loading} />
     </div>
   );

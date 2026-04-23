@@ -91,8 +91,17 @@ class HxFirebaseMessagingService : FirebaseMessagingService() {
     // ─── Notification display ───
 
     private fun showNotification(messageId: String, priority: String, group: String) {
-        val title = "$group · 新消息"
-        val body = "点击查看详情"
+        val title = when (priority) {
+            "urgent" -> "⚠️ 紧急 · $group"
+            "high" -> "❗ 重要 · $group"
+            else -> "📨 $group · 新消息"
+        }
+        val body = when (priority) {
+            "urgent" -> "收到紧急消息，请立即查看"
+            "high" -> "收到重要消息，请及时查看"
+            "debug" -> "收到调试消息"
+            else -> "点击查看详情"
+        }
 
         val channelId = when (priority) {
             "urgent" -> HxApp.CHANNEL_URGENT
@@ -112,24 +121,43 @@ class HxFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, channelId)
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
-            .setPriority(
-                when (priority) {
-                    "urgent" -> NotificationCompat.PRIORITY_MAX
-                    "high" -> NotificationCompat.PRIORITY_HIGH
-                    "low" -> NotificationCompat.PRIORITY_LOW
-                    "debug" -> NotificationCompat.PRIORITY_MIN
-                    else -> NotificationCompat.PRIORITY_DEFAULT
-                }
-            )
-            .build()
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setGroup("hx_messages")
+            .setColor(0xFF1D9BF0.toInt())
+
+        when (priority) {
+            "urgent" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_MAX)
+                builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+                builder.setFullScreenIntent(pendingIntent, true)
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            }
+            "high" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_HIGH)
+                builder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            }
+            "low" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_LOW)
+                builder.setSilent(true)
+            }
+            "debug" -> {
+                builder.setPriority(NotificationCompat.PRIORITY_MIN)
+                builder.setSilent(true)
+            }
+            else -> {
+                builder.setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                builder.setDefaults(NotificationCompat.DEFAULT_SOUND)
+            }
+        }
 
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(notifId++, notification)
+        manager.notify(notifId++, builder.build())
     }
 }

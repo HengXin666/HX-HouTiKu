@@ -47,6 +47,7 @@ app.get("/", authRecipientToken(), async (c) => {
     group_key: row.group_key ?? "",
     timestamp: row.timestamp,
     is_read: row.is_read === 1,
+    is_starred: (row as any).is_starred === 1,
   }));
 
   const unreadResult = await c.env.DB.prepare(
@@ -82,6 +83,58 @@ const markReadHandler = async (c: Context<{ Bindings: Env; Variables: { recipien
 };
 app.put("/read", markRead, markReadHandler);
 app.post("/read", markRead, markReadHandler);
+
+// PUT /api/messages/starred — toggle starred status for messages
+app.put("/starred", authRecipientToken(), async (c) => {
+  const { message_ids, starred } = await c.req.json<{ message_ids: string[]; starred: boolean }>();
+
+  if (!message_ids || message_ids.length === 0) {
+    return c.json({ error: "message_ids required" }, 400);
+  }
+
+  const starredVal = starred ? 1 : 0;
+  const statements = message_ids.map((id) =>
+    c.env.DB.prepare(
+      "UPDATE messages SET is_starred = ? WHERE id = ?"
+    ).bind(starredVal, id)
+  );
+
+  await c.env.DB.batch(statements);
+
+  // Broadcast star sync to all online devices via DO WebSocket
+  const allRecipients = await c.env.DB.prepare(
+    "SELECT id FROM recipients WHERE is_active = 1"
+  ).all<{ id: string }>();
+
+  const starPayload = { type: "star_sync" as const, message_ids, starred };
+
+  await Promise.all(
+    allRecipients.results.map(async (r) => {
+      try {
+        const doId = c.env.MESSAGE_RELAY.idFromName(r.id);
+        const stub = c.env.MESSAGE_RELAY.get(doId);
+        await stub.fetch("https://do-internal/broadcast", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(starPayload),
+        });
+      } catch {
+        // DO broadcast failure is non-critical
+      }
+    })
+  );
+
+  return c.json({ updated: message_ids.length, starred });
+});
+
+// GET /api/messages/starred — get all starred message IDs
+app.get("/starred", authRecipientToken(), async (c) => {
+  const result = await c.env.DB.prepare(
+    "SELECT id FROM messages WHERE is_starred = 1 ORDER BY timestamp DESC"
+  ).all<{ id: string }>();
+
+  return c.json({ starred_ids: result.results.map((r) => r.id) });
+});
 
 // DELETE /api/messages — permanently delete messages + sync to other devices
 app.delete("/", authRecipientToken(), async (c) => {
