@@ -28,7 +28,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </div>
       </main>
-      <BottomNav wsStatus={wsStatus} />
+      <BottomNav wsStatus={wsStatus} deviceCount={deviceCount} />
       <NotificationToast />
     </div>
   );

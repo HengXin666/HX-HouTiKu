@@ -37,7 +37,7 @@ export function Feed() {
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
 
-  const { messages, loading, refresh, wsStatus } = useMessages();
+  const { messages, loading, refresh, wsStatus, deviceCount } = useMessages();
 
   const error = useMessageStore((s) => s.error);
   const activeTab = useMessageStore((s) => s.activeTab);
@@ -128,7 +128,11 @@ export function Feed() {
             ) : (
               <WifiDisconnected style={{ width: 12, height: 12 }} />
             )}
-            <span>{wsStatus === "connected" ? "在线" : wsStatus === "connecting" ? "连接中" : "离线"}</span>
+            <span>
+              {wsStatus === "connected"
+                ? `在线${deviceCount > 1 ? ` · ${deviceCount}` : ""}`
+                : wsStatus === "connecting" ? "连接中" : "离线"}
+            </span>
           </div>
         </div>
         {unreadCount > 0 && (

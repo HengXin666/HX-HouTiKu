@@ -13,9 +13,10 @@ const TABS = [
 
 interface BottomNavProps {
   wsStatus: WsStatus;
+  deviceCount: number;
 }
 
-export function BottomNav({ wsStatus }: BottomNavProps) {
+export function BottomNav({ wsStatus, deviceCount }: BottomNavProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const totalUnread = useMessageStore((s) => s.totalUnread);
@@ -35,7 +36,9 @@ export function BottomNav({ wsStatus }: BottomNavProps) {
           <WifiOff style={{ width: 10, height: 10 }} />
         )}
         <span>
-          {wsStatus === "connected" ? "实时连接" : wsStatus === "connecting" ? "连接中..." : "离线"}
+          {wsStatus === "connected"
+            ? `在线${deviceCount > 1 ? ` · ${deviceCount} 设备` : ""}`
+            : wsStatus === "connecting" ? "连接中..." : "离线"}
         </span>
       </div>
 
