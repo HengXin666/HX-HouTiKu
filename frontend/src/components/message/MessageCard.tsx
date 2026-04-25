@@ -6,6 +6,8 @@ import {
   ArrowDown,
   Bug,
   FolderOpen,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { cn, relativeTime, PRIORITY_CONFIG, type PriorityLevel } from "@/lib/utils";
 
@@ -28,6 +30,9 @@ interface MessageCardProps {
   timestamp: number;
   is_read: boolean;
   tags: string[];
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
 export function MessageCard({
@@ -39,6 +44,9 @@ export function MessageCard({
   timestamp,
   is_read,
   tags,
+  selectMode,
+  selected,
+  onToggleSelect,
 }: MessageCardProps) {
   const navigate = useNavigate();
   const config = PRIORITY_CONFIG[priority as PriorityLevel] ?? PRIORITY_CONFIG.default;
@@ -46,11 +54,34 @@ export function MessageCard({
   const preview = body ? stripMarkdown(body).slice(0, 140) : "";
   const showUrgentLabel = priority === "urgent" || priority === "high";
 
+  const handleClick = () => {
+    if (selectMode && onToggleSelect) {
+      onToggleSelect(id);
+    } else {
+      navigate(`/message/${id}`);
+    }
+  };
+
   return (
     <button
-      onClick={() => navigate(`/message/${id}`)}
-      className={cn("msg-card", is_read && "msg-card--read")}
+      onClick={handleClick}
+      className={cn(
+        "msg-card",
+        is_read && "msg-card--read",
+        selectMode && selected && "msg-card--selected",
+      )}
     >
+      {/* 选择模式: 复选框 */}
+      {selectMode && (
+        <div className="msg-card-checkbox">
+          {selected ? (
+            <CheckSquare style={{ width: 20, height: 20, color: "var(--color-primary)" }} />
+          ) : (
+            <Square style={{ width: 20, height: 20, opacity: 0.4 }} />
+          )}
+        </div>
+      )}
+
       {/* Left: priority vertical bar */}
       <div className={cn("msg-card-bar", `msg-card-bar--${priority}`)} />
 
@@ -96,7 +127,7 @@ export function MessageCard({
       </div>
 
       {/* Unread dot */}
-      {!is_read && <div className="msg-card-unread-dot" />}
+      {!selectMode && !is_read && <div className="msg-card-unread-dot" />}
     </button>
   );
 }

@@ -8,9 +8,12 @@ import type { Message } from "@/stores/message-store";
 interface MessageListProps {
   messages: Message[];
   loading: boolean;
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
-export function MessageList({ messages, loading }: MessageListProps) {
+export function MessageList({ messages, loading, selectMode, selectedIds, onToggleSelect }: MessageListProps) {
   if (loading && messages.length === 0) {
     return (
       <div className="msg-list-loading">
@@ -36,7 +39,13 @@ export function MessageList({ messages, loading }: MessageListProps) {
           </div>
           <div className="msg-list-items">
             {msgs.map((msg) => (
-              <MessageCard key={msg.id} {...msg} />
+              <MessageCard
+                key={msg.id}
+                {...msg}
+                selectMode={selectMode}
+                selected={selectedIds?.has(msg.id)}
+                onToggleSelect={onToggleSelect}
+              />
             ))}
           </div>
         </div>

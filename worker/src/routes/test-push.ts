@@ -179,46 +179,47 @@ app.post("/", authPushToken(), async (c) => {
 /**
  * ECIES encrypt using secp256k1, compatible with eciesjs v0.4 format.
  *
- * Output: base64( ephemeral_pub_uncompressed(65) || iv(16) || tag(16) || ciphertext )
+ * Key derivation: HKDF-SHA256(ikm = ephPub || sharedPoint, salt=undefined, info=undefined) → 32 bytes
+ * Symmetric: AES-256-GCM with 16-byte nonce
+ * Output: base64( ephemeral_pub_uncompressed(65) || nonce(16) || tag(16) || ciphertext )
  */
 async function eciesEncrypt(recipientPubHex: string, plaintext: string): Promise<string> {
   const pubHex = recipientPubHex.startsWith("0x") ? recipientPubHex.slice(2) : recipientPubHex;
 
-  // Use @noble/curves to decompress / validate the public key
-  const pubPoint = secp256k1.ProjectivePoint.fromHex(pubHex);
-  const recipientPubBytes = pubPoint.toRawBytes(false); // 65 bytes, uncompressed
-
   // Generate ephemeral key pair
   const ephPrivKey = secp256k1.utils.randomPrivateKey();
-  const ephPubPoint = secp256k1.ProjectivePoint.BASE.multiply(
-    bytesToBigint(ephPrivKey)
-  );
-  const ephPubBytes = ephPubPoint.toRawBytes(false); // 65 bytes
+  const ephPubBytes = secp256k1.getPublicKey(ephPrivKey, false); // 65 bytes, uncompressed
 
-  // ECDH: shared = ephPriv × recipientPub
-  const sharedPoint = pubPoint.multiply(bytesToBigint(ephPrivKey));
-  const sharedX = bigintToBytes(sharedPoint.x, 32);
+  // ECDH: sharedPoint = secp256k1.getSharedSecret(ephPriv, recipientPub, false)
+  // eciesjs 使用 compressed 格式的公钥作为 getSharedSecret 的输入
+  const recipientPubCompressed = secp256k1.ProjectivePoint.fromHex(pubHex).toRawBytes(true);
+  const sharedPointBytes = secp256k1.getSharedSecret(ephPrivKey, recipientPubCompressed, false); // 65 bytes
 
-  // HKDF-SHA256(ikm=shared_x, salt='', info='') → 32 bytes AES key
-  const aesKeyBytes = hkdf(sha256, sharedX, new Uint8Array(0), new Uint8Array(0), 32);
+  // HKDF-SHA256(ikm = ephPub || sharedPoint, salt=undefined, info=undefined) → 32 bytes AES key
+  // 与 eciesjs v0.4 的 getSharedKey(senderPoint, sharedPoint) 一致
+  const ikm = new Uint8Array(ephPubBytes.length + sharedPointBytes.length);
+  ikm.set(ephPubBytes, 0);
+  ikm.set(sharedPointBytes, ephPubBytes.length);
+  const aesKeyBytes = hkdf(sha256, ikm, undefined, undefined, 32);
 
-  // AES-256-GCM
-  const iv = crypto.getRandomValues(new Uint8Array(16));
+  // AES-256-GCM with 16-byte nonce (eciesjs v0.4 default: symmetricNonceLength = 16)
+  const nonce = crypto.getRandomValues(new Uint8Array(16));
   const cryptoKey = await crypto.subtle.importKey("raw", aesKeyBytes, "AES-GCM", false, ["encrypt"]);
   const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv, tagLength: 128 },
+    { name: "AES-GCM", iv: nonce, tagLength: 128 },
     cryptoKey,
     new TextEncoder().encode(plaintext),
   );
 
+  // WebCrypto AES-GCM 输出: ciphertext || tag
   const encBytes = new Uint8Array(encrypted);
   const ciphertext = encBytes.slice(0, encBytes.length - 16);
   const tag = encBytes.slice(encBytes.length - 16);
 
-  // eciesjs format: ephemeral_pub(65) || iv(16) || tag(16) || ciphertext
+  // eciesjs v0.4 格式: ephemeral_pub(65) || nonce(16) || tag(16) || ciphertext
   const result = new Uint8Array(65 + 16 + 16 + ciphertext.length);
   result.set(ephPubBytes, 0);
-  result.set(iv, 65);
+  result.set(nonce, 65);
   result.set(tag, 81);
   result.set(ciphertext, 97);
 
@@ -226,21 +227,6 @@ async function eciesEncrypt(recipientPubHex: string, plaintext: string): Promise
   let binary = "";
   for (const byte of result) binary += String.fromCharCode(byte);
   return btoa(binary);
-}
-
-function bytesToBigint(bytes: Uint8Array): bigint {
-  let hex = "";
-  for (const b of bytes) hex += b.toString(16).padStart(2, "0");
-  return BigInt("0x" + (hex || "0"));
-}
-
-function bigintToBytes(n: bigint, len: number): Uint8Array {
-  const hex = n.toString(16).padStart(len * 2, "0");
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
 }
 
 export default app;

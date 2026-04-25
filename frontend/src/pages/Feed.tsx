@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import {
   WifiOff,
@@ -14,12 +14,19 @@ import {
   WifiOff as WifiDisconnected,
   CheckCircle2,
   Bell,
+  CheckSquare,
+  Square,
+  Trash2,
+  Check,
+  X,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMessageStore } from "@/stores/message-store";
 import { useMessages } from "@/hooks/use-messages";
 import { MessageList } from "@/components/message/MessageList";
 import { cn } from "@/lib/utils";
+import { Toast } from "@/components/ui/Toast";
+import { Dialog } from "@/components/ui/Dialog";
 
 import type { LucideIcon } from "lucide-react";
 
@@ -42,8 +49,16 @@ export function Feed() {
   const error = useMessageStore((s) => s.error);
   const activeTab = useMessageStore((s) => s.activeTab);
   const setActiveTab = useMessageStore((s) => s.setActiveTab);
+  const deleteMessage = useMessageStore((s) => s.deleteMessage);
+  const markRead = useMessageStore((s) => s.markRead);
 
   const noToken = !recipientToken || !privateKeyHex;
+
+  // 批量选择模式
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteVisible, setDeleteVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Filter messages by group and priority
   const filtered = messages.filter((m) => {
@@ -74,6 +89,56 @@ export function Feed() {
     debug: scopedMsgs.filter((m) => m.priority === "debug").length,
   };
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(filtered.map((m) => m.id)));
+  }, [filtered]);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBatchDelete = async () => {
+    if (!recipientToken || selectedIds.size === 0) return;
+    setDeleting(true);
+    try {
+      await deleteMessage(recipientToken, [...selectedIds]);
+      Toast.show({ content: `已删除 ${selectedIds.size} 条消息`, position: "bottom" });
+      exitSelectMode();
+    } catch {
+      Toast.show({ content: "删除失败", position: "bottom" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleBatchMarkRead = async () => {
+    if (!recipientToken || selectedIds.size === 0) return;
+    const unreadIds = [...selectedIds].filter((id) => {
+      const msg = messages.find((m) => m.id === id);
+      return msg && !msg.is_read;
+    });
+    if (unreadIds.length === 0) {
+      Toast.show({ content: "所选消息均已读", position: "bottom" });
+      return;
+    }
+    await markRead(recipientToken, unreadIds);
+    Toast.show({ content: `已标记 ${unreadIds.length} 条为已读`, position: "bottom" });
+    exitSelectMode();
+  };
+
   // No token state
   if (noToken && messages.length === 0) {
     return (
@@ -94,6 +159,47 @@ export function Feed() {
       {/* Group title (only when viewing a specific group) */}
       {groupName && (
         <h2 className="feed-group-title">{groupName}</h2>
+      )}
+
+      {/* 批量操作栏 */}
+      {selectMode && (
+        <div className="feed-batch-bar">
+          <div className="feed-batch-left">
+            <button onClick={exitSelectMode} className="feed-batch-btn">
+              <X style={{ width: 16, height: 16 }} />
+            </button>
+            <span className="feed-batch-count">已选 {selectedIds.size} 项</span>
+          </div>
+          <div className="feed-batch-right">
+            <button
+              onClick={selectedIds.size === filtered.length ? () => setSelectedIds(new Set()) : selectAll}
+              className="feed-batch-btn"
+            >
+              {selectedIds.size === filtered.length ? (
+                <CheckSquare style={{ width: 16, height: 16 }} />
+              ) : (
+                <Square style={{ width: 16, height: 16 }} />
+              )}
+              <span>{selectedIds.size === filtered.length ? "取消全选" : "全选"}</span>
+            </button>
+            <button
+              onClick={handleBatchMarkRead}
+              className="feed-batch-btn"
+              disabled={selectedIds.size === 0}
+            >
+              <Check style={{ width: 16, height: 16 }} />
+              <span>已读</span>
+            </button>
+            <button
+              onClick={() => setDeleteVisible(true)}
+              className="feed-batch-btn feed-batch-btn--danger"
+              disabled={selectedIds.size === 0}
+            >
+              <Trash2 style={{ width: 16, height: 16 }} />
+              <span>删除</span>
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Dashboard status bar (kanban style) ── */}
@@ -135,11 +241,23 @@ export function Feed() {
             </span>
           </div>
         </div>
-        {unreadCount > 0 && (
-          <div className="feed-dashboard-unread">
-            <strong>{unreadCount}</strong> 未读
-          </div>
-        )}
+        <div className="feed-dashboard-actions">
+          {unreadCount > 0 && (
+            <div className="feed-dashboard-unread">
+              <strong>{unreadCount}</strong> 未读
+            </div>
+          )}
+          {!selectMode && messages.length > 0 && (
+            <button
+              onClick={() => setSelectMode(true)}
+              className="feed-select-btn"
+              title="批量操作"
+            >
+              <CheckSquare style={{ width: 14, height: 14 }} />
+              <span>选择</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Horizontal scrolling category tabs ── */}
@@ -182,7 +300,32 @@ export function Feed() {
       )}
 
       {/* Message list with time grouping */}
-      <MessageList messages={filtered} loading={loading} />
+      <MessageList
+        messages={filtered}
+        loading={loading}
+        selectMode={selectMode}
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
+      />
+
+      <Dialog
+        visible={deleteVisible}
+        content={`确定永久删除选中的 ${selectedIds.size} 条消息？此操作不可撤销。`}
+        closeOnAction
+        onClose={() => setDeleteVisible(false)}
+        actions={[
+          [
+            { key: "cancel", text: "取消", onClick: () => setDeleteVisible(false) },
+            {
+              key: "delete",
+              text: deleting ? "删除中…" : "删除",
+              bold: true,
+              danger: true,
+              onClick: handleBatchDelete,
+            },
+          ],
+        ]}
+      />
     </div>
   );
 }
