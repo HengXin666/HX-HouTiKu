@@ -57,24 +57,23 @@ function getDB(): Promise<IDBPDatabase<UPushDB>> {
   if (!dbPromise) {
     dbPromise = openDB<UPushDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
-        // Keystore
         if (!db.objectStoreNames.contains("keystore")) {
           db.createObjectStore("keystore");
         }
-
-        // Messages cache
         if (!db.objectStoreNames.contains("messages")) {
           const msgStore = db.createObjectStore("messages", { keyPath: "id" });
           msgStore.createIndex("by-timestamp", "timestamp");
           msgStore.createIndex("by-group", "group");
           msgStore.createIndex("by-priority", "priority");
         }
-
-        // Preferences
         if (!db.objectStoreNames.contains("preferences")) {
           db.createObjectStore("preferences");
         }
       },
+    }).catch((err) => {
+      // IndexedDB 打开失败时清除缓存的 promise，允许下次重试
+      dbPromise = null;
+      throw err;
     });
   }
   return dbPromise;
@@ -88,8 +87,13 @@ export async function saveKeyData(data: UPushDB["keystore"]["value"]): Promise<v
 }
 
 export async function getKeyData(): Promise<UPushDB["keystore"]["value"] | undefined> {
-  const db = await getDB();
-  return db.get("keystore", "current");
+  try {
+    const db = await getDB();
+    return db.get("keystore", "current");
+  } catch {
+    // IndexedDB 不可用时返回 undefined，由调用方重试
+    return undefined;
+  }
 }
 
 export async function clearKeyData(): Promise<void> {
@@ -152,8 +156,12 @@ export async function setPref(key: string, value: unknown): Promise<void> {
 }
 
 export async function getPref<T>(key: string): Promise<T | undefined> {
-  const db = await getDB();
-  return db.get("preferences", key) as Promise<T | undefined>;
+  try {
+    const db = await getDB();
+    return db.get("preferences", key) as Promise<T | undefined>;
+  } catch {
+    return undefined;
+  }
 }
 
 // --- Full Reset ---

@@ -46,7 +46,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   rememberPassword: false,
 
   initialize: async () => {
-    const keyData = await getKeyData();
+    // Android WebView 冷启动时 IndexedDB 可能短暂不可用
+    // 添加重试机制避免误判为 "no-keys" 导致跳转到配置页面
+    let keyData = await getKeyData();
+    if (!keyData) {
+      // 等待 IndexedDB 完全就绪后重试一次
+      await new Promise((r) => setTimeout(r, 300));
+      keyData = await getKeyData();
+    }
     if (!keyData) {
       set({ status: "no-keys" });
       return;
