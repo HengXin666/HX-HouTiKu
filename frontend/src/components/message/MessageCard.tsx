@@ -51,7 +51,7 @@ export function MessageCard({
   const navigate = useNavigate();
   const config = PRIORITY_CONFIG[priority as PriorityLevel] ?? PRIORITY_CONFIG.default;
   const PriorityIcon = PRIORITY_ICONS[priority] ?? Circle;
-  const preview = body ? stripMarkdown(body).slice(0, 140) : "";
+  const preview = body ? extractPreview(body, 140) : "";
   const showUrgentLabel = priority === "urgent" || priority === "high";
 
   const handleClick = () => {
@@ -132,8 +132,31 @@ export function MessageCard({
   );
 }
 
-function stripMarkdown(text: string): string {
-  return text
+// 从消息 body 中提取干净的预览文本
+function extractPreview(text: string, maxLen: number): string {
+  let content = text;
+
+  // 如果包含 <hr/> 或 <hr>，取其后的内容作为正文预览（跳过邮件元信息头）
+  const hrIdx = content.search(/<hr\s*\/?>/i);
+  if (hrIdx !== -1) {
+    content = content.slice(hrIdx).replace(/<hr\s*\/?>/i, "");
+  }
+
+  // 去除 HTML 标签
+  content = content
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(?:p|div|li|tr|h[1-6]|blockquote|pre)>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#\d+;/g, "");
+
+  // 去除 Markdown 语法
+  content = content
     .replace(/```[\s\S]*?```/g, "[code]")
     .replace(/`[^`]+`/g, "[code]")
     .replace(/#{1,6}\s/g, "")
@@ -141,9 +164,13 @@ function stripMarkdown(text: string): string {
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/!\[[^\]]*\]\([^)]+\)/g, "[image]")
-    .replace(/>\s/g, "")
-    .replace(/[-*+]\s/g, "")
+    .replace(/>\s/g, "");
+
+  // 压缩空白
+  content = content
     .replace(/\n/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  return content.slice(0, maxLen);
 }

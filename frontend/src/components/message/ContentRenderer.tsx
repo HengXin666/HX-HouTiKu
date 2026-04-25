@@ -286,6 +286,7 @@ function HtmlRenderer({ content }: { content: string }) {
     const safeHtml = DOMPurify.sanitize(proxiedHtml, {
       ADD_TAGS: ["style"],
       ADD_ATTR: ["target", "rel", "referrerpolicy", "crossorigin"],
+      ADD_DATA_URI_TAGS: ["img"],
       FORBID_TAGS: ["script", "iframe", "object", "embed", "form"],
       FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover"],
     });

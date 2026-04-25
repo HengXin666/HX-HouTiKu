@@ -67,9 +67,18 @@ export default {
     const parsed = await new PostalMime().parse(rawEmail);
 
     // 获取真实发件人 (避免 Cloudflare SRS 重写地址)
-    // 优先级: Reply-To > X-Original-From > SRS 反向解析 > 原始 From
-    const rawFrom = parsed.from?.address || message.from;
-    const from = extractOriginalSender(rawFrom, message.headers);
+    // postal-mime 解析的 from 可能已经是 SRS 地址, 所以所有来源都需要经过 SRS 解析
+    const parsedFromAddr = parsed.from?.address || "";
+    const mimeFromHeader = message.headers.get("from") || "";
+    const envelopeFrom = message.from;
+
+    // 按优先级尝试获取真实发件人:
+    // 1. Reply-To / X-Original-From 头
+    // 2. postal-mime 解析的 From (如果不是 SRS)
+    // 3. MIME From 头 (如果不是 SRS)
+    // 4. 对 SRS 地址进行反向解析
+    // 5. envelope sender
+    const from = resolveRealFrom(parsedFromAddr, mimeFromHeader, envelopeFrom, message.headers);
     const fromName = parsed.from?.name || "";
     const fromDisplay = fromName ? `${fromName} <${from}>` : from;
     const to = message.to;
@@ -463,48 +472,80 @@ async function pushToHoutiku(
   }
 }
 
-// 从 SRS 重写地址或邮件头中提取原始发件人
-// Cloudflare Email Routing 会将 From 改写为 SRS 格式:
-//   srs0=hash=tt=original-domain=original-user@forwarding-domain
-// 例如: srs0=cutu=yc=qq.com=hxloli@woa.qzz.io → hxloli@qq.com
-function extractOriginalSender(fromAddr: string, headers: Headers): string {
-  // 1. 尝试从 Reply-To 头获取 (很多转发服务会保留)
+// 从多个来源中解析出真实发件人地址
+function resolveRealFrom(
+  parsedFromAddr: string,
+  mimeFromHeader: string,
+  envelopeFrom: string,
+  headers: Headers,
+): string {
+  // 1. 尝试从 Reply-To 头获取
   const replyTo = headers.get("reply-to");
   if (replyTo) {
-    const match = replyTo.match(/[\w.+-]+@[\w.-]+/);
-    if (match) return match[0];
+    const addr = extractEmailAddr(replyTo);
+    if (addr && !isSrsAddress(addr)) return addr;
   }
 
   // 2. 尝试从 X-Original-From 头获取
   const xOriginal = headers.get("x-original-from");
   if (xOriginal) {
-    const match = xOriginal.match(/[\w.+-]+@[\w.-]+/);
-    if (match) return match[0];
+    const addr = extractEmailAddr(xOriginal);
+    if (addr && !isSrsAddress(addr)) return addr;
   }
 
-  // 3. 尝试从 SRS 地址反向解析
-  const srsResult = parseSrsAddress(fromAddr);
-  if (srsResult) return srsResult;
+  // 3. postal-mime 解析的 From, 如果不是 SRS 就直接用
+  if (parsedFromAddr && !isSrsAddress(parsedFromAddr)) {
+    return parsedFromAddr;
+  }
 
-  // 4. 回退: 返回原始地址
-  return fromAddr;
+  // 4. MIME From 头, 提取邮箱地址, 如果不是 SRS 就用
+  if (mimeFromHeader) {
+    const addr = extractEmailAddr(mimeFromHeader);
+    if (addr && !isSrsAddress(addr)) return addr;
+  }
+
+  // 5. 对所有可能的 SRS 地址尝试反向解析
+  for (const candidate of [parsedFromAddr, mimeFromHeader, envelopeFrom]) {
+    const addr = extractEmailAddr(candidate) || candidate;
+    const resolved = parseSrsAddress(addr);
+    if (resolved) return resolved;
+  }
+
+  // 6. 回退
+  return parsedFromAddr || envelopeFrom;
+}
+
+// 判断是否为 SRS 重写地址
+function isSrsAddress(addr: string): boolean {
+  const local = addr.split("@")[0].toLowerCase();
+  return local.startsWith("srs0=") || local.startsWith("srs1=");
+}
+
+// 从 "Name <email@example.com>" 或 "email@example.com" 中提取邮箱地址
+function extractEmailAddr(raw: string): string | null {
+  if (!raw) return null;
+  const match = raw.match(/<([^>]+)>/);
+  if (match) return match[1];
+  const addrMatch = raw.match(/[\w.+-]+@[\w.-]+/);
+  return addrMatch ? addrMatch[0] : null;
 }
 
 // 解析 SRS (Sender Rewriting Scheme) 地址
 // 格式: srs0=hash=tt=original-domain=original-user@forwarding-domain
-// 返回: original-user@original-domain, 或 null
+// 例如: srs0=cutu=yc=qq.com=hxloli@woa.qzz.io → hxloli@qq.com
 function parseSrsAddress(addr: string): string | null {
-  const lower = addr.toLowerCase();
-  if (!lower.startsWith("srs0=") && !lower.startsWith("srs1=")) return null;
+  if (!isSrsAddress(addr)) return null;
 
-  // srs0=hash=tt=domain=user@forwarding-domain
-  const localPart = addr.split("@")[0]; // srs0=hash=tt=domain=user
+  // 取 @ 前面的 local part: srs0=hash=tt=domain=user
+  const localPart = addr.split("@")[0];
   const parts = localPart.split("=");
-  // parts: ["srs0", "hash", "tt", "domain", "user"]
+  // parts: ["srs0", "hash", "tt", "domain", "user", ...]
   if (parts.length >= 5) {
-    const originalUser = parts.slice(4).join("="); // 用户名可能含 =
     const originalDomain = parts[3];
-    return `${originalUser}@${originalDomain}`;
+    const originalUser = parts.slice(4).join("="); // 用户名可能含 =
+    if (originalDomain && originalUser) {
+      return `${originalUser}@${originalDomain}`;
+    }
   }
   return null;
 }
