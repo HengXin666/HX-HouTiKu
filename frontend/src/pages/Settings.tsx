@@ -368,7 +368,7 @@ export function Settings() {
               <div className="settings-item-desc">
                 {isNativePlatform
                   ? pushEnabled
-                    ? "已订阅原生推送 (FCM)"
+                    ? "已开启后台推送服务"
                     : "开启后接收实时推送"
                   : hasWebPush
                     ? Notification.permission === "denied"

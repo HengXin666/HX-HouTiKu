@@ -10,6 +10,7 @@ import {
   requestNotificationPermission,
 } from "@/lib/push";
 import { isNativePlatform, getNativeBridge } from "@/lib/platform";
+import { getApiBase } from "@/lib/api";
 
 export function usePush() {
   const recipientToken = useAuthStore((s) => s.recipientToken);
@@ -25,20 +26,16 @@ export function usePush() {
   }, [pushEnabled, recipientToken]);
 
   // On native Android, also cache the recipient token to SharedPreferences
-  // so the FCM service can re-register on token refresh
+  // so the native WS service can auto-restart after reboot
   useEffect(() => {
     if (isNativePlatform && recipientToken) {
-      try {
-        // The WebView's localStorage is accessible, but we also want to
-        // ensure the native service has access via SharedPreferences.
-        // The registerFcmPush bridge call handles this implicitly through
-        // the HTTP call, but for token refresh in background we need the
-        // native side to have the credentials cached.
-        //
-        // This is handled by the native registerFcmPush which caches
-        // apiBase and recipientToken when called.
-      } catch {
-        // non-critical
+      const bridge = getNativeBridge();
+      if (bridge) {
+        // saveApiBase 会将 URL 持久化到 SharedPreferences
+        // BootReceiver 在开机后读取这些凭据来重启 WS 服务
+        getApiBase().then((apiBase) => {
+          if (apiBase) bridge.saveApiBase(apiBase);
+        }).catch(() => {});
       }
     }
   }, [recipientToken]);

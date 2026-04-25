@@ -139,9 +139,6 @@ class MainActivity : AppCompatActivity() {
 
         // Request notification permission proactively on first launch
         requestNotificationPermissionIfNeeded()
-
-        // Request battery optimization exemption for background WS service
-        requestBatteryOptimizationExemption()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -495,6 +492,11 @@ class MainActivity : AppCompatActivity() {
                 token,
                 recipientId
             )
+
+            // 首次启动 WS 服务时请求电池优化豁免
+            // 根据 Android 官方文档, 前台服务需要电池优化豁免才能可靠运行
+            // https://developer.android.com/develop/background-work/services/foreground-services
+            requestBatteryOptimizationExemption()
         }
 
         /** Stop the WebSocket foreground service */

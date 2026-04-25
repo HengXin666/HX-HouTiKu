@@ -16,8 +16,6 @@ export interface HxNativeBridge {
   getAppVersion(): string;
   getNotificationStatus(): string;
   requestNotification(): void;
-  getFcmToken(): void;
-  registerFcmPush(apiBase: string, recipientToken: string): void;
   showToast(message: string): void;
   startWebSocket(wsUrl: string, token: string, recipientId: string): void;
   stopWebSocket(): void;
@@ -28,8 +26,6 @@ export interface HxNativeBridge {
 declare global {
   interface Window {
     HxNative?: HxNativeBridge;
-    __hxNativeFcmCallback?: (token: string | null) => void;
-    __hxNativeFcmRegisterCallback?: (statusCode: number) => void;
     __hxNativeNotificationCallback?: (status: string) => void;
     __hxNativeWsMessage?: (data: string) => void;
     __hxNativeWsStatus?: (status: string) => void;
@@ -71,32 +67,10 @@ export function getNativeBridge(): HxNativeBridge | null {
 }
 
 /**
- * Get FCM token from native bridge (async via callback).
- * Resolves with the token string, or null if unavailable.
- */
-export function getNativeFcmToken(): Promise<string | null> {
-  const bridge = getNativeBridge();
-  if (!bridge) return Promise.resolve(null);
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      window.__hxNativeFcmCallback = undefined;
-      resolve(null);
-    }, 10_000);
-
-    window.__hxNativeFcmCallback = (token) => {
-      clearTimeout(timeout);
-      window.__hxNativeFcmCallback = undefined;
-      resolve(token);
-    };
-
-    bridge.getFcmToken();
-  });
-}
-
-/**
  * Request notification permission via native bridge (Android 13+).
  * Resolves with "granted" or "denied".
+ * 参考: https://developer.android.com/develop/ui/views/notifications/notification-permission
+ */
  */
 export function requestNativeNotificationPermission(): Promise<string> {
   const bridge = getNativeBridge();

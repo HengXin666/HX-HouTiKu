@@ -59,7 +59,7 @@ function emitNotification(msg: Message) {
   if (msg.priority !== "low" && msg.priority !== "debug") {
     const groupLabel = msg.group || "general";
     const priorityLabel = msg.priority === "urgent" ? "紧急" : msg.priority === "high" ? "重要" : "新";
-    showBrowserNotification(
+    void showBrowserNotification(
       `${groupLabel} · ${priorityLabel}消息`,
       msg.title || "点击查看详情",
       { tag: `hx-${msg.priority}-${groupLabel}`, messageId: msg.id, priority: msg.priority },
