@@ -1,6 +1,5 @@
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
-  Shield,
   Inbox,
   Star,
   FolderOpen,
@@ -57,7 +56,7 @@ export function Sidebar({ wsStatus, deviceCount }: SidebarProps) {
       {/* Logo */}
       <Link to="/" className="sidebar-logo" style={{ textDecoration: "none" }}>
         <div className="sidebar-logo-icon">
-          <Shield className="sidebar-logo-shield" />
+          <img src="/logo.png" alt="HouTiKu" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }} />
         </div>
         <div className="sidebar-logo-text">
           <span className="sidebar-logo-name">HouTiKu</span>

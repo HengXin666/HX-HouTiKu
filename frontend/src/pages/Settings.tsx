@@ -112,7 +112,14 @@ export function Settings() {
 
   return (
     <div className="settings-page">
-      {/* ── Connection ── */}
+      {/* Logo */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "1.5rem 0 0.5rem" }}>
+        <img src="/logo.png" alt="HX-HouTiKu" style={{ width: 80, height: 80, borderRadius: "1rem", objectFit: "cover" }} />
+        <div style={{ marginTop: "0.5rem", fontSize: "1.125rem", fontWeight: 700, color: "var(--color-foreground)" }}>HX-HouTiKu</div>
+        <div style={{ fontSize: "0.75rem", color: "var(--color-muted-foreground)" }}>E2E Encrypted Push</div>
+      </div>
+
+      {/* Connection */}
       <div className="settings-group">
         <div className="settings-group-label">连接</div>
         <div className="settings-card">
