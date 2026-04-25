@@ -54,14 +54,15 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (channel_id) REFERENCES channels(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_msg_recipient ON messages(recipient_id);
+-- 仅保留核心索引，减少写入开销（每个索引在 INSERT/UPDATE/DELETE 时都有维护成本）
+-- 已删除: idx_msg_recipient (recipient_id 全为空串，无区分度)
+-- 已删除: idx_msg_priority (基数极低，timestamp 索引已覆盖排序)
+-- 已删除: idx_msg_group (基数极低，同上)
+-- 已删除: idx_msg_channel (基数极低，同上)
+-- 已删除: idx_msg_group_key (代码中未使用)
+-- 已删除: idx_msg_delivered (代码中未使用，cron 用的是 created_at/expires_at)
 CREATE INDEX IF NOT EXISTS idx_msg_timestamp ON messages(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_msg_priority ON messages(priority);
-CREATE INDEX IF NOT EXISTS idx_msg_group ON messages(group_name);
-CREATE INDEX IF NOT EXISTS idx_msg_unread ON messages(recipient_id, is_read);
-CREATE INDEX IF NOT EXISTS idx_msg_channel ON messages(channel_id);
-CREATE INDEX IF NOT EXISTS idx_msg_group_key ON messages(group_key);
-CREATE INDEX IF NOT EXISTS idx_msg_delivered ON messages(delivered_at);
+CREATE INDEX IF NOT EXISTS idx_msg_unread ON messages(is_read);
 
 -- 4. Web Push Subscriptions
 CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -90,7 +91,8 @@ CREATE TABLE IF NOT EXISTS api_tokens (
     last_used_at INTEGER DEFAULT 0
 );
 
--- 6. Rate Limiting (sliding window counters — kept for potential D1-based rate limiting)
+-- 6. Rate Limiting (已废弃 — 限流已改为纯内存实现，此表保留仅为兼容旧数据)
+-- 新部署可安全删除此表
 CREATE TABLE IF NOT EXISTS rate_limit_hits (
     bucket TEXT PRIMARY KEY,
     hit_count INTEGER NOT NULL DEFAULT 0,

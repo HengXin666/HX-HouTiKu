@@ -47,14 +47,16 @@ object AppUpdater {
 
         return withContext(Dispatchers.IO) {
             try {
-                prefs.edit().putLong(PREF_LAST_CHECK, System.currentTimeMillis()).apply()
-
                 val conn = URL("$RELEASES_URL?per_page=1").openConnection()
                 conn.setRequestProperty("Accept", "application/vnd.github+json")
                 conn.connectTimeout = 10_000
                 conn.readTimeout = 10_000
 
                 val json = conn.getInputStream().bufferedReader().readText()
+
+                // 请求成功后才记录时间戳，失败时允许下次立即重试
+                prefs.edit().putLong(PREF_LAST_CHECK, System.currentTimeMillis()).apply()
+
                 val releases = JSONArray(json)
                 if (releases.length() == 0) return@withContext null
 

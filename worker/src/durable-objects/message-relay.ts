@@ -47,6 +47,11 @@ export class MessageRelay implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
 
+  /** 清理间隔：每 180 秒唤醒一次检测死连接（降低 DO Request 消耗） */
+  private static readonly CLEANUP_INTERVAL_MS = 180_000;
+  /** 如果一个 socket 超过此时间没有收到 ping，视为死连接（客户端 ping 间隔 25s） */
+  private static readonly STALE_THRESHOLD_MS = 180_000;
+
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
@@ -110,14 +115,10 @@ export class MessageRelay implements DurableObject {
     (server as any).serializeAttachment(meta);
 
     // Send connection confirmation to ALL connected sockets (including the new one)
-    const sockets = this.state.getWebSockets();
-    const countMsg = JSON.stringify({
-      type: "connected",
-      device_count: sockets.length,
-    } satisfies ServerMessage);
-    for (const s of sockets) {
-      try { s.send(countMsg); } catch { /* dead socket */ }
-    }
+    this.broadcastDeviceCount();
+
+    // 有连接时启动定期清理 alarm
+    this.ensureAlarm();
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -129,19 +130,26 @@ export class MessageRelay implements DurableObject {
   private async handleBroadcast(request: Request): Promise<Response> {
     const payload = await request.json<ServerMessage>();
     const sockets = this.state.getWebSockets();
+    const totalBefore = sockets.length;
 
     let sent = 0;
+    let dead = 0;
     for (const ws of sockets) {
       try {
         ws.send(JSON.stringify(payload));
         sent++;
       } catch {
-        // Socket is dead — close it so Hibernation API cleans up
+        dead++;
         try { ws.close(1011, "Send failed"); } catch { /* ignore */ }
       }
     }
 
-    return Response.json({ sent, total: sockets.length });
+    // 如果有死连接被清理，广播更新后的设备数给存活的客户端
+    if (dead > 0) {
+      this.broadcastDeviceCount();
+    }
+
+    return Response.json({ sent, total: totalBefore });
   }
 
   // ── Hibernation API Callbacks ───────────────────────────────
@@ -159,17 +167,8 @@ export class MessageRelay implements DurableObject {
    * Called when a WebSocket is closed (by client or network).
    */
   async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
-    // Broadcast updated device count to remaining sockets
-    const sockets = this.state.getWebSockets();
-    if (sockets.length > 0) {
-      const countMsg = JSON.stringify({
-        type: "connected",
-        device_count: sockets.length,
-      } satisfies ServerMessage);
-      for (const s of sockets) {
-        try { s.send(countMsg); } catch { /* dead socket */ }
-      }
-    }
+    this.broadcastDeviceCount();
+    this.ensureAlarm();
   }
 
   /**
@@ -178,6 +177,73 @@ export class MessageRelay implements DurableObject {
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     console.error("WebSocket error:", error);
     try { ws.close(1011, "Internal error"); } catch { /* ignore */ }
+    this.broadcastDeviceCount();
   }
 
+  /**
+   * Durable Object alarm — 定期唤醒检测并清理死连接。
+   * 当客户端进程被杀死时，TCP FIN 可能无法到达 Cloudflare，
+   * 导致 getWebSockets() 仍返回已死的 socket。
+   * 通过检查 getWebSocketAutoResponseTimestamp 判断 socket 是否仍活跃。
+   */
+  async alarm(): Promise<void> {
+    const sockets = this.state.getWebSockets();
+    if (sockets.length === 0) return;
+
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const ws of sockets) {
+      try {
+        // getWebSocketAutoResponseTimestamp 返回最后一次自动回复 ping 的时间
+        // 如果客户端已死，它不会再发 ping，时间戳会过期
+        const lastPing = ws.deserializeAttachment() as WebSocketMeta | null;
+        const lastAutoResponse = (ws as any).getWebSocketAutoResponseTimestamp?.();
+
+        if (lastAutoResponse) {
+          const lastTime = lastAutoResponse.getTime();
+          if (now - lastTime > MessageRelay.STALE_THRESHOLD_MS) {
+            console.log(`Closing stale socket (last ping: ${now - lastTime}ms ago)`);
+            try { ws.close(1011, "Stale connection"); } catch { /* ignore */ }
+            cleaned++;
+          }
+        }
+      } catch {
+        // 无法读取状态的 socket 也视为死连接
+        try { ws.close(1011, "Unreadable socket"); } catch { /* ignore */ }
+        cleaned++;
+      }
+    }
+
+    if (cleaned > 0) {
+      this.broadcastDeviceCount();
+    }
+
+    // 如果还有活跃连接，继续调度下一次清理
+    const remaining = this.state.getWebSockets();
+    if (remaining.length > 0) {
+      this.state.storage.setAlarm(Date.now() + MessageRelay.CLEANUP_INTERVAL_MS);
+    }
+  }
+
+  /** 向所有存活的 socket 广播当前设备数 */
+  private broadcastDeviceCount(): void {
+    const sockets = this.state.getWebSockets();
+    if (sockets.length === 0) return;
+    const countMsg = JSON.stringify({
+      type: "connected",
+      device_count: sockets.length,
+    } satisfies ServerMessage);
+    for (const s of sockets) {
+      try { s.send(countMsg); } catch { /* dead socket */ }
+    }
+  }
+
+  /** 确保 alarm 已调度（有连接时才需要） */
+  private ensureAlarm(): void {
+    const sockets = this.state.getWebSockets();
+    if (sockets.length > 0) {
+      this.state.storage.setAlarm(Date.now() + MessageRelay.CLEANUP_INTERVAL_MS);
+    }
+  }
 }

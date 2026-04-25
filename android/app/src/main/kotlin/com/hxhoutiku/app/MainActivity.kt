@@ -206,15 +206,37 @@ class MainActivity : AppCompatActivity() {
                 view: WebView?,
                 request: WebResourceRequest?
             ): Boolean {
-                val url = request?.url?.toString() ?: return false
+                val uri = request?.url ?: return false
+                val url = uri.toString()
+                val scheme = uri.scheme ?: ""
+
+                // 允许 WebView 内部协议正常处理
+                if (scheme == "about" || scheme == "data" || scheme == "blob" || scheme == "javascript") {
+                    return false
+                }
+
+                // 非 http(s) 协议（如 intent:// tel: mailto:）交给系统处理
+                if (scheme != "http" && scheme != "https") {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    } catch (_: Exception) { }
+                    return true
+                }
+
                 val apiBase = getApiBase()
-                // Keep navigation within our domain
-                if (apiBase.isNotBlank() && url.startsWith(apiBase)) return false
-                // External links: open in system browser
+                if (apiBase.isNotBlank()) {
+                    // 同域名判断：比较 host 而非完整前缀，避免路径/协议差异导致误跳浏览器
+                    val apiHost = Uri.parse(apiBase).host
+                    val targetHost = uri.host
+                    if (apiHost != null && apiHost == targetHost) return false
+                }
+
+                // 本地文件 URL 保持在 WebView 内
+                if (scheme == "file") return false
+
+                // 其余外部链接用系统浏览器打开
                 try {
-                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
-                    intent.data = android.net.Uri.parse(url)
-                    startActivity(intent)
+                    startActivity(Intent(Intent.ACTION_VIEW, uri))
                 } catch (_: Exception) { }
                 return true
             }
@@ -307,18 +329,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var updateCheckScheduled = false
+    private var updateCheckJob: Job? = null
 
     /**
      * 在 onPageFinished 后延迟执行更新检查。
      * 延迟 2 秒确保 React 已挂载并注册了 window.__hxNativeUpdateAvailable 回调。
-     * 使用标志位避免多次 onPageFinished 触发重复检查。
+     * 使用 Job 去重，取消前一个未完成的检查任务。
      */
     private fun scheduleUpdateCheck() {
-        if (updateCheckScheduled) return
-        updateCheckScheduled = true
+        // 如果已有检查任务在运行，跳过（避免同一次页面加载重复触发）
+        if (updateCheckJob?.isActive == true) return
 
-        scope.launch {
+        updateCheckJob = scope.launch {
             delay(2000)
             val update = AppUpdater.checkForUpdate(this@MainActivity, BuildConfig.VERSION_NAME)
             if (update != null) {
@@ -365,6 +387,9 @@ class MainActivity : AppCompatActivity() {
         HxWebSocketService.isAppInForeground = true
         // Re-apply immersive flags when returning to the app (system resets them)
         hideSystemUI()
+        // 每次回到前台时重置更新检查，允许再次触发
+        // （AppUpdater 内部有 4 小时节流，不会频繁请求网络）
+        updateCheckJob = null
     }
 
     override fun onPause() {
