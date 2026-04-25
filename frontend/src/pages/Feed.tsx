@@ -112,10 +112,13 @@ export function Feed() {
 
   const handleBatchDelete = async () => {
     if (!recipientToken || selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    const ids = [...selectedIds];
     setDeleting(true);
     try {
-      await deleteMessage(recipientToken, [...selectedIds]);
-      Toast.show({ content: `已删除 ${selectedIds.size} 条消息`, position: "bottom" });
+      await deleteMessage(recipientToken, ids);
+      Toast.show({ content: `已删除 ${count} 条消息`, position: "bottom" });
+      setDeleteVisible(false);
       exitSelectMode();
     } catch {
       Toast.show({ content: "删除失败", position: "bottom" });
@@ -311,7 +314,6 @@ export function Feed() {
       <Dialog
         visible={deleteVisible}
         content={`确定永久删除选中的 ${selectedIds.size} 条消息？此操作不可撤销。`}
-        closeOnAction
         onClose={() => setDeleteVisible(false)}
         actions={[
           [

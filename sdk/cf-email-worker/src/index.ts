@@ -110,6 +110,22 @@ function matchRule(pattern: string, from: string, to: string, subject: string): 
   return subject.toLowerCase().includes(lower.trim());
 }
 
+// 将邮件头日期转换为北京时间格式: 2026-4-25 19:26:58
+function formatBeijingTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 async function pushToHoutiku(
   env: Env,
   email: {
@@ -122,10 +138,11 @@ async function pushToHoutiku(
   },
 ): Promise<void> {
   const title = `📧 ${email.subject}`;
+  const timeStr = formatBeijingTime(email.date);
   const body = [
-    `**发件人**: ${email.from}`,
-    `**收件人**: ${email.to}`,
-    `**时间**: ${email.date}`,
+    `<p><b>发件人</b>: ${email.from}</p>`,
+    `<p><b>收件人</b>: ${email.to}</p>`,
+    `<p><b>时间</b>: 北京时间 ${timeStr}</p>`,
   ].join("\n");
 
   // 使用 /api/test-push 接口, 服务端自动加密

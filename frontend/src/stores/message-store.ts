@@ -254,6 +254,9 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         totalUnread: Math.max(0, state.totalUnread - unreadRemoved),
       };
     });
+
+    // 清理 IndexedDB 缓存, 防止刷新后消息重新出现
+    deleteCachedMessages(ids).catch(() => {});
   },
 
   toggleStar: (token, id) => {
