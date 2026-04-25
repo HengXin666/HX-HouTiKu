@@ -164,9 +164,20 @@ class HxWebSocketService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                wsUrl = intent.getStringExtra(EXTRA_WS_URL) ?: ""
-                recipientToken = intent.getStringExtra(EXTRA_TOKEN) ?: ""
-                recipientId = intent.getStringExtra(EXTRA_RECIPIENT_ID) ?: ""
+                val newUrl = intent.getStringExtra(EXTRA_WS_URL) ?: ""
+                val newToken = intent.getStringExtra(EXTRA_TOKEN) ?: ""
+                val newId = intent.getStringExtra(EXTRA_RECIPIENT_ID) ?: ""
+
+                // 如果凭据相同且已有活跃连接，跳过重复启动
+                if (newUrl == wsUrl && newToken == recipientToken && newId == recipientId
+                    && webSocket != null) {
+                    Log.d(TAG, "WS already connected with same credentials, skipping")
+                    return START_STICKY
+                }
+
+                wsUrl = newUrl
+                recipientToken = newToken
+                recipientId = newId
                 isUserInitiatedDisconnect = false
                 connect()
             }
@@ -230,7 +241,12 @@ class HxWebSocketService : Service() {
 
     override fun onDestroy() {
         isUserInitiatedDisconnect = true
-        disconnect()
+        // 服务销毁时优雅关闭连接
+        val ws = webSocket
+        webSocket = null
+        cancelPing()
+        reconnectHandler?.removeCallbacksAndMessages(null)
+        try { ws?.close(1000, "Service destroyed") } catch (_: Exception) {}
         releaseWakeLock()
         pingHandler?.removeCallbacksAndMessages(null)
         pingHandler = null
@@ -250,6 +266,9 @@ class HxWebSocketService : Service() {
             return
         }
 
+        // 先关闭已有连接，防止重复连接导致服务端设备计数不断增长
+        disconnect()
+
         // Build URL with auth params
         val url = "$wsUrl?token=${recipientToken}&recipient_id=${recipientId}"
         Log.d(TAG, "Connecting to $url")
@@ -260,12 +279,15 @@ class HxWebSocketService : Service() {
     }
 
     private fun disconnect() {
-        try {
-            webSocket?.close(1000, "User disconnect")
-        } catch (_: Exception) {}
+        val ws = webSocket
         webSocket = null
         cancelPing()
         reconnectHandler?.removeCallbacksAndMessages(null)
+        // 使用 cancel() 而非 close()，立即终止连接且不触发 onClosed 回调
+        // 避免旧连接的 onClosed 回调干扰新建立的连接
+        try {
+            ws?.cancel()
+        } catch (_: Exception) {}
     }
 
     private fun scheduleReconnect() {
@@ -292,6 +314,7 @@ class HxWebSocketService : Service() {
     private val wsListener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             Log.i(TAG, "WebSocket connected")
+            // 仅当这是最新创建的连接时才更新引用
             this@HxWebSocketService.webSocket = webSocket
             resetBackoff()
             schedulePing()
@@ -317,6 +340,8 @@ class HxWebSocketService : Service() {
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             Log.d(TAG, "WS closed: $code $reason")
+            // 仅当关闭的是当前活跃连接时才处理，避免旧连接回调干扰新连接
+            if (this@HxWebSocketService.webSocket !== webSocket) return
             this@HxWebSocketService.webSocket = null
             cancelPing()
             broadcast(MSG_WS_DISCONNECTED, """{"code":$code,"reason":"$reason"}""")
@@ -325,6 +350,8 @@ class HxWebSocketService : Service() {
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             Log.e(TAG, "WS failure", t)
+            // 仅当失败的是当前活跃连接时才处理
+            if (this@HxWebSocketService.webSocket !== webSocket) return
             this@HxWebSocketService.webSocket = null
             cancelPing()
             broadcast(MSG_WS_ERROR, """{"error":"${t.message}"}""")

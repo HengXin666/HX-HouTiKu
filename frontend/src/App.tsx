@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -48,16 +48,24 @@ export function App() {
   }, [status, recipientToken]);
 
   // Auto-register push when unlocked + pushEnabled + permission already granted
+  // 使用 ref 避免重复调用 startWebSocket 导致服务端设备计数增长
+  const pushRegisteredRef = useRef<string | null>(null);
   useEffect(() => {
     if (
       status !== "unlocked" ||
       !recipientToken ||
       !pushEnabled
-    ) return;
+    ) {
+      pushRegisteredRef.current = null;
+      return;
+    }
+
+    if (pushRegisteredRef.current === recipientToken) return;
 
     // Native Android: always try to register (native bridge handles permission)
     // Web: only if Web Push is supported and permission is already granted
     if (isNativeAndroid || (hasWebPush && Notification.permission === "granted")) {
+      pushRegisteredRef.current = recipientToken;
       registerPushSubscription(recipientToken).catch(console.error);
     }
   }, [status, recipientToken, pushEnabled]);

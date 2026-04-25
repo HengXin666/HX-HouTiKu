@@ -2,7 +2,7 @@
  * Hook for push subscription management — works on both Web and Native Android.
  */
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import {
@@ -19,9 +19,15 @@ export function usePush() {
   const [loading, setLoading] = useState(false);
 
   // On native, auto-register push when token is available and push is enabled
+  // 使用 ref 追踪上次注册的 token，避免重复调用 startWebSocket 导致服务端设备计数增长
+  const lastRegisteredRef = useRef<string | null>(null);
   useEffect(() => {
     if (isNativePlatform && pushEnabled && recipientToken) {
+      if (lastRegisteredRef.current === recipientToken) return;
+      lastRegisteredRef.current = recipientToken;
       registerPushSubscription(recipientToken).catch(console.error);
+    } else if (!pushEnabled) {
+      lastRegisteredRef.current = null;
     }
   }, [pushEnabled, recipientToken]);
 

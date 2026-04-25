@@ -131,11 +131,13 @@ class MainActivity : AppCompatActivity() {
         configureWebView()
 
         // Load the frontend
+        // 不再显示本地配置页面，直接加载前端
+        // 如果没有配置 api_base，加载内置的离线提示页面引导用户到设置界面
         val apiBase = getApiBase()
         if (apiBase.isNotBlank()) {
             webView.loadUrl(apiBase)
         } else {
-            webView.loadUrl("file:///android_asset/index.html")
+            webView.loadUrl("file:///android_asset/setup_hint.html")
         }
 
         // Request notification permission proactively on first launch
@@ -195,7 +197,7 @@ class MainActivity : AppCompatActivity() {
                                 .edit()
                                 .remove("api_base")
                                 .apply()
-                            view.loadUrl("file:///android_asset/index.html")
+                            view.loadUrl("file:///android_asset/setup_hint.html")
                         }
                     }
                 }
