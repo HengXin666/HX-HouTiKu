@@ -98,6 +98,11 @@ class HxWebSocketService : Service() {
         var isConnected = false
             private set
 
+        /** 当前在线设备数量，由服务端 connected 消息更新 */
+        @Volatile
+        var deviceCount = 0
+            private set
+
         @Volatile
         private var onMessageListener: WsMessageListener? = null
 
@@ -335,6 +340,14 @@ class HxWebSocketService : Service() {
         override fun onMessage(webSocket: WebSocket, text: String) {
             Log.d(TAG, "WS message: ${text.take(120)}…")
             broadcast(MSG_WS_MESSAGE, text)
+
+            // 解析 connected 消息，缓存设备数量供冷启动时推送
+            try {
+                val json = JSONObject(text)
+                if (json.optString("type") == "connected") {
+                    deviceCount = json.optInt("device_count", 1)
+                }
+            } catch (_: Exception) {}
 
             // Parse and show system notification for new messages when app is in background
             handleIncomingMessage(text)

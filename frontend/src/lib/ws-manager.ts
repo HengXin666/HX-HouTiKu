@@ -238,8 +238,12 @@ export function wsInit(recipientToken: string) {
           }
         } catch { /* ignore */ }
       };
-      window.__hxNativeWsStatus = (s: string) => {
-        if (s === "connected") setStatus("connected");
+      window.__hxNativeWsStatus = (s: string, dc?: number) => {
+        if (s === "connected") {
+          if (dc !== undefined && dc > 0) deviceCount = dc;
+          else if (deviceCount === 0) deviceCount = 1;
+          setStatus("connected");
+        }
         else if (s === "disconnected") setStatus("disconnected");
         else if (s === "error") setStatus("disconnected");
       };

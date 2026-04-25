@@ -377,9 +377,10 @@ class MainActivity : AppCompatActivity() {
             delay(1500)
             val wsConnected = HxWebSocketService.isConnected
             val statusStr = if (wsConnected) "connected" else "disconnected"
+            val dc = HxWebSocketService.deviceCount
             runOnUiThread {
                 webView.evaluateJavascript(
-                    "window.__hxNativeWsStatus && window.__hxNativeWsStatus('$statusStr')",
+                    "window.__hxNativeWsStatus && window.__hxNativeWsStatus('$statusStr', $dc)",
                     null
                 )
             }
@@ -464,8 +465,9 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
                 HxWebSocketService.MSG_WS_CONNECTED -> {
+                    val dc = HxWebSocketService.deviceCount
                     webView.evaluateJavascript(
-                        "window.__hxNativeWsStatus && window.__hxNativeWsStatus('connected')",
+                        "window.__hxNativeWsStatus && window.__hxNativeWsStatus('connected', $dc)",
                         null
                     )
                 }
