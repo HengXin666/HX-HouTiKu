@@ -147,11 +147,10 @@ export function showBrowserNotification(
   const notification = new Notification(title, {
     body,
     icon: "/icons/icon-192x192.png",
-    badge: "/icons/icon-192x192.png",
     tag,
-    vibrate,
     requireInteraction: priority === "urgent",
-  });
+    vibrate,
+  } as NotificationOptions);
 
   notification.onclick = () => {
     window.focus();
