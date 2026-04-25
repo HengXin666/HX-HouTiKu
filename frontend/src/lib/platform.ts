@@ -71,7 +71,6 @@ export function getNativeBridge(): HxNativeBridge | null {
  * Resolves with "granted" or "denied".
  * 参考: https://developer.android.com/develop/ui/views/notifications/notification-permission
  */
- */
 export function requestNativeNotificationPermission(): Promise<string> {
   const bridge = getNativeBridge();
   if (!bridge) return Promise.resolve("denied");
