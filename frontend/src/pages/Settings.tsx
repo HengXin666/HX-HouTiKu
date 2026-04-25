@@ -114,8 +114,8 @@ export function Settings() {
     <div className="settings-page">
       {/* Logo */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "1.5rem 0 0.5rem" }}>
-        <img src="/logo.png" alt="HX-HouTiKu" style={{ width: 80, height: 80, borderRadius: "1rem", objectFit: "cover" }} />
-        <div style={{ marginTop: "0.5rem", fontSize: "1.125rem", fontWeight: 700, color: "var(--color-foreground)" }}>HX-HouTiKu</div>
+        <img src="/logo.png" alt="HX-HouTiKu" style={{ width: 280, height: 280, borderRadius: "2rem", objectFit: "cover" }} />
+        <div style={{ marginTop: "0.75rem", fontSize: "1.375rem", fontWeight: 700, color: "var(--color-foreground)" }}>HX-HouTiKu</div>
         <div style={{ fontSize: "0.75rem", color: "var(--color-muted-foreground)" }}>E2E Encrypted Push</div>
       </div>
 

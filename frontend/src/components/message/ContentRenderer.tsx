@@ -260,10 +260,14 @@ const SHADOW_STYLES = `
     border-radius: 12px;
     padding: 1em;
     overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
     margin: 0.75em 0;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+    font-size: 0.9em;
   }
   code {
-    font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
     font-size: 0.9em;
   }
 `;

@@ -334,7 +334,7 @@ function buildGitHubBody(email: ParsedEmail, gh: GitHubInfo): string {
     if (email.isHtml) {
       parts.push(`<hr/>\n${replaceCidImages(email.body, email.cidMap)}`);
     } else {
-      parts.push(`<hr/>\n<pre>${escapeHtml(email.body)}</pre>`);
+      parts.push(`<hr/>\n${plainTextToHtml(email.body)}`);
     }
   }
 
@@ -361,11 +361,21 @@ function buildGenericBody(email: ParsedEmail): string {
     if (email.isHtml) {
       parts.push(`<hr/>\n${replaceCidImages(email.body, email.cidMap)}`);
     } else {
-      parts.push(`<hr/>\n<pre>${escapeHtml(email.body)}</pre>`);
+      parts.push(`<hr/>\n${plainTextToHtml(email.body)}`);
     }
   }
 
   return parts.join("\n");
+}
+
+// 将纯文本转为 HTML 段落 (不使用 <pre>，避免水平滚动)
+function plainTextToHtml(text: string): string {
+  const escaped = escapeHtml(text);
+  // 按空行分段，每段用 <p> 包裹；段内换行用 <br/>
+  return escaped
+    .split(/\n{2,}/)
+    .map((para) => `<p style="white-space:pre-wrap;word-break:break-word;margin:0.5em 0">${para.replace(/\n/g, "<br/>")}</p>`)
+    .join("\n");
 }
 
 // 将 HTML 中的 cid: 引用替换为 base64 data URI

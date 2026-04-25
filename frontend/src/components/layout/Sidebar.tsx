@@ -56,7 +56,7 @@ export function Sidebar({ wsStatus, deviceCount }: SidebarProps) {
       {/* Logo */}
       <Link to="/" className="sidebar-logo" style={{ textDecoration: "none" }}>
         <div className="sidebar-logo-icon">
-          <img src="/logo.png" alt="HouTiKu" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }} />
+          <img src="/logo.png" alt="HouTiKu" style={{ width: 48, height: 48, borderRadius: 10, objectFit: "cover" }} />
         </div>
         <div className="sidebar-logo-text">
           <span className="sidebar-logo-name">HouTiKu</span>
