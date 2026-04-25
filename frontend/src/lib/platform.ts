@@ -21,6 +21,9 @@ export interface HxNativeBridge {
   stopWebSocket(): void;
   updateWsCredentials(token: string, recipientId: string): void;
   saveApiBase(url: string): void;
+  checkUpdate(): void;
+  openUrl(url: string): void;
+  skipUpdate(version: string): void;
 }
 
 declare global {
@@ -29,6 +32,7 @@ declare global {
     __hxNativeNotificationCallback?: (status: string) => void;
     __hxNativeWsMessage?: (data: string) => void;
     __hxNativeWsStatus?: (status: string) => void;
+    __hxNativeUpdateAvailable?: (version: string, downloadUrl: string) => void;
   }
 }
 

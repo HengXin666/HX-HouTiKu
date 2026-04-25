@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -12,7 +12,7 @@ import { CloneDevice } from "@/pages/CloneDevice";
 import { StarredPage } from "@/pages/StarredPage";
 import { AppShell } from "@/components/layout/AppShell";
 import { registerPushSubscription } from "@/lib/push";
-import { hasWebPush, isNativeAndroid } from "@/lib/platform";
+import { hasWebPush, isNativeAndroid, getNativeBridge } from "@/lib/platform";
 import { wsInit, wsDestroy } from "@/lib/ws-manager";
 
 export function App() {
@@ -21,11 +21,22 @@ export function App() {
   const initSettings = useSettingsStore((s) => s.initialize);
   const pushEnabled = useSettingsStore((s) => s.pushEnabled);
   const recipientToken = useAuthStore((s) => s.recipientToken);
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string } | null>(null);
 
   useEffect(() => {
     initAuth();
     initSettings();
   }, [initAuth, initSettings]);
+
+  // Android 更新检测回调
+  useEffect(() => {
+    if (isNativeAndroid) {
+      window.__hxNativeUpdateAvailable = (version: string, url: string) => {
+        setUpdateInfo({ version, url });
+      };
+      return () => { window.__hxNativeUpdateAvailable = undefined; };
+    }
+  }, []);
 
   // ── WebSocket lifecycle: init when unlocked, destroy on lock/logout ──
   useEffect(() => {
@@ -57,6 +68,21 @@ export function App() {
 
   return (
     <BrowserRouter>
+      {updateInfo && (
+        <UpdateBanner
+          version={updateInfo.version}
+          url={updateInfo.url}
+          onDismiss={() => {
+            const bridge = getNativeBridge();
+            if (bridge) bridge.skipUpdate(updateInfo.version);
+            setUpdateInfo(null);
+          }}
+          onUpdate={() => {
+            const bridge = getNativeBridge();
+            if (bridge) bridge.openUrl(updateInfo.url);
+          }}
+        />
+      )}
       <AppContent status={status} />
     </BrowserRouter>
   );
@@ -105,6 +131,36 @@ function SplashScreen() {
           <div className="splash-loader-icon">🔐</div>
         </div>
         <p className="text-muted-foreground text-sm mt-6 animate-pulse">正在加载...</p>
+      </div>
+    </div>
+  );
+}
+
+function UpdateBanner({ version, url, onDismiss, onUpdate }: {
+  version: string;
+  url: string;
+  onDismiss: () => void;
+  onUpdate: () => void;
+}) {
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
+      background: "linear-gradient(135deg, #1d4ed8, #7c3aed)",
+      color: "#fff", padding: "12px 16px",
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      fontSize: "14px", gap: "8px",
+      paddingTop: "calc(12px + var(--sat, 0px))",
+    }}>
+      <span>🚀 新版本 v{version} 可用</span>
+      <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+        <button onClick={onDismiss} style={{
+          background: "rgba(255,255,255,0.2)", border: "none", color: "#fff",
+          borderRadius: "6px", padding: "4px 12px", cursor: "pointer",
+        }}>跳过</button>
+        <button onClick={onUpdate} style={{
+          background: "#fff", border: "none", color: "#1d4ed8",
+          borderRadius: "6px", padding: "4px 12px", cursor: "pointer", fontWeight: 600,
+        }}>更新</button>
       </div>
     </div>
   );

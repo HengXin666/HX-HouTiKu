@@ -12,7 +12,8 @@ export async function getApiBase(): Promise<string> {
   if (_cachedApiBase !== undefined) return _cachedApiBase;
   const stored = await getPref<string>("apiBase");
   const base: string = stored || import.meta.env.VITE_API_BASE || "";
-  _cachedApiBase = base;
+  // 只缓存非空值，避免 IndexedDB 未初始化完时缓存空字符串
+  if (base) _cachedApiBase = base;
   return base;
 }
 

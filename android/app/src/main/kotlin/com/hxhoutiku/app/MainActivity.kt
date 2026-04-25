@@ -28,6 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import com.hxhoutiku.app.service.HxWebSocketService
+import com.hxhoutiku.app.updater.AppUpdater
 import kotlinx.coroutines.*
 
 /**
@@ -139,6 +140,9 @@ class MainActivity : AppCompatActivity() {
 
         // Request notification permission proactively on first launch
         requestNotificationPermissionIfNeeded()
+
+        // Check for app updates (non-blocking)
+        checkForUpdates()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -294,6 +298,21 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Log.w("MainActivity", "Failed to request battery optimization exemption", e)
                 }
+            }
+        }
+    }
+
+    private fun checkForUpdates() {
+        scope.launch {
+            val update = AppUpdater.checkForUpdate(this@MainActivity, BuildConfig.VERSION_NAME)
+            if (update != null) {
+                // 通知 WebView 有新版本可用
+                val escaped = update.versionName.replace("'", "\\'")
+                val urlEscaped = update.downloadUrl.replace("'", "\\'")
+                webView.evaluateJavascript(
+                    "window.__hxNativeUpdateAvailable && window.__hxNativeUpdateAvailable('$escaped','$urlEscaped')",
+                    null
+                )
             }
         }
     }
@@ -493,10 +512,12 @@ class MainActivity : AppCompatActivity() {
                 recipientId
             )
 
-            // 首次启动 WS 服务时请求电池优化豁免
-            // 根据 Android 官方文档, 前台服务需要电池优化豁免才能可靠运行
-            // https://developer.android.com/develop/background-work/services/foreground-services
-            requestBatteryOptimizationExemption()
+            // 首次启动 WS 服务时请求电池优化豁免（只弹一次）
+            val prefs = getSharedPreferences("hx_settings", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("battery_opt_requested", false)) {
+                prefs.edit().putBoolean("battery_opt_requested", true).apply()
+                requestBatteryOptimizationExemption()
+            }
         }
 
         /** Stop the WebSocket foreground service */
@@ -519,6 +540,36 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun updateWsCredentials(token: String, recipientId: String) {
             HxWebSocketService.updateCredentials(this@MainActivity, token, recipientId)
+        }
+
+        /** Check for app updates via GitHub Releases */
+        @JavascriptInterface
+        fun checkUpdate() {
+            scope.launch {
+                val update = AppUpdater.checkForUpdate(this@MainActivity, BuildConfig.VERSION_NAME)
+                if (update != null) {
+                    val escaped = update.versionName.replace("'", "\\'")
+                    val urlEscaped = update.downloadUrl.replace("'", "\\'")
+                    runOnUiThread {
+                        webView.evaluateJavascript(
+                            "window.__hxNativeUpdateAvailable && window.__hxNativeUpdateAvailable('$escaped','$urlEscaped')",
+                            null
+                        )
+                    }
+                }
+            }
+        }
+
+        /** Open URL in system browser for APK download */
+        @JavascriptInterface
+        fun openUrl(url: String) {
+            AppUpdater.openDownload(this@MainActivity, url)
+        }
+
+        /** Skip a specific version update */
+        @JavascriptInterface
+        fun skipUpdate(version: String) {
+            AppUpdater.skipVersion(this@MainActivity, version)
         }
     }
 }

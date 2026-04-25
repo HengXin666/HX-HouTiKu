@@ -14,6 +14,7 @@
  */
 
 import { getApiBase } from "./api";
+import { isNativeAndroid } from "./platform";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -113,6 +114,12 @@ function scheduleReconnect() {
 
 async function doConnect() {
   if (!token) return;
+  // Android 上由原生 HxWebSocketService 维护唯一的 WS 连接
+  // WebView 内不再建立 JS WS，避免重复连接占用服务端资源
+  if (isNativeAndroid) {
+    setStatus("connected");
+    return;
+  }
   if (ws && ws.readyState === WebSocket.OPEN) return;
 
   clearTimers();
@@ -201,6 +208,31 @@ export function wsInit(recipientToken: string) {
   if (!initialized) {
     initialized = true;
     document.addEventListener("visibilitychange", handleVisibility);
+
+    // Android: 原生 HxWebSocketService 通过 Broadcast → MainActivity → evaluateJavascript
+    // 将消息转发到 window.__hxNativeWsMessage 回调
+    if (isNativeAndroid) {
+      window.__hxNativeWsMessage = (data: string) => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.type === "new_message" && parsed.message) {
+            for (const fn of messageListeners) fn(parsed.message);
+          } else if (parsed.type === "message_deleted" && parsed.message_ids) {
+            for (const fn of deleteListeners) fn({ message_ids: parsed.message_ids });
+          } else if (parsed.type === "star_sync" && parsed.message_ids) {
+            for (const fn of starSyncListeners) fn({ message_ids: parsed.message_ids, starred: parsed.starred });
+          } else if (parsed.type === "connected") {
+            deviceCount = parsed.device_count ?? 1;
+            for (const fn of statusListeners) fn(status, deviceCount);
+          }
+        } catch { /* ignore */ }
+      };
+      window.__hxNativeWsStatus = (s: string) => {
+        if (s === "connected") setStatus("connected");
+        else if (s === "disconnected") setStatus("disconnected");
+        else if (s === "error") setStatus("disconnected");
+      };
+    }
   }
   // If already connected with same token, skip
   if (ws && ws.readyState === WebSocket.OPEN) return;

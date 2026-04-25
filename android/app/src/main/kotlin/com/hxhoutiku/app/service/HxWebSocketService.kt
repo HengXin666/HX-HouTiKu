@@ -374,10 +374,9 @@ class HxWebSocketService : Service() {
             val msgId = msg.optString("id", "msg-${System.currentTimeMillis()}")
             val priority = msg.optString("priority", "default")
             val group = msg.optString("group", "general")
+            val groupKey = msg.optString("group_key", "")
 
-            // Always show system notification — even when foreground
-            // Users expect notification bar indicators for new messages on mobile
-            showMessageNotification(msgId, priority, group)
+            showMessageNotification(msgId, priority, group, groupKey)
 
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse WS message for notification", e)
@@ -389,10 +388,12 @@ class HxWebSocketService : Service() {
      * Uses the priority-based notification channels from HxApp for
      * appropriate sound, vibration, and heads-up display behavior.
      */
-    private fun showMessageNotification(messageId: String, priority: String, group: String) {
+    private fun showMessageNotification(messageId: String, priority: String, group: String, groupKey: String = "") {
         val title = when (priority) {
-            "urgent" -> "紧急 · $group"
-            "high" -> "重要 · $group"
+            "urgent" -> "🔴 紧急 · $group"
+            "high" -> "🟠 重要 · $group"
+            "low" -> "$group · 低优先级"
+            "debug" -> "$group · 调试"
             else -> "$group · 新消息"
         }
         val body = when (priority) {
@@ -456,7 +457,8 @@ class HxWebSocketService : Service() {
             }
             else -> {
                 builder.setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                builder.setDefaults(NotificationCompat.DEFAULT_SOUND)
+                builder.setDefaults(NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE)
+                builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             }
         }
 

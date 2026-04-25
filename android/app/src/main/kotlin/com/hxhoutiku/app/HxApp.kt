@@ -25,7 +25,7 @@ class HxApp : Application() {
         val urgent = NotificationChannel(
             CHANNEL_URGENT,
             getString(R.string.channel_urgent),
-            NotificationManager.IMPORTANCE_HIGH
+            NotificationManager.IMPORTANCE_MAX
         ).apply {
             description = getString(R.string.channel_urgent_desc)
             enableVibration(true)
@@ -52,6 +52,7 @@ class HxApp : Application() {
             description = getString(R.string.channel_default_desc)
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 100)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
 
         val low = NotificationChannel(
