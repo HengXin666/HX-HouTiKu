@@ -140,9 +140,6 @@ class MainActivity : AppCompatActivity() {
 
         // Request notification permission proactively on first launch
         requestNotificationPermissionIfNeeded()
-
-        // Check for app updates (non-blocking)
-        checkForUpdates()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -177,6 +174,13 @@ class MainActivity : AppCompatActivity() {
                 super.onPageFinished(view, url)
                 // Inject safe-area CSS variables for notch/status bar
                 injectSafeAreaInsets()
+
+                // 页面加载完成后延迟检查更新
+                // 必须等 React 挂载完毕并注册 window.__hxNativeUpdateAvailable 回调
+                // 否则 evaluateJavascript 调用时回调函数还不存在
+                if (url != null && !url.startsWith("file:///android_asset/offline")) {
+                    scheduleUpdateCheck()
+                }
 
                 // P0 fix: Detect if WebView accidentally loaded the API health-check JSON
                 // instead of the frontend SPA. This happens when api_base was overwritten
@@ -302,17 +306,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkForUpdates() {
+    private var updateCheckScheduled = false
+
+    /**
+     * 在 onPageFinished 后延迟执行更新检查。
+     * 延迟 2 秒确保 React 已挂载并注册了 window.__hxNativeUpdateAvailable 回调。
+     * 使用标志位避免多次 onPageFinished 触发重复检查。
+     */
+    private fun scheduleUpdateCheck() {
+        if (updateCheckScheduled) return
+        updateCheckScheduled = true
+
         scope.launch {
+            delay(2000)
             val update = AppUpdater.checkForUpdate(this@MainActivity, BuildConfig.VERSION_NAME)
             if (update != null) {
-                // 通知 WebView 有新版本可用
                 val escaped = update.versionName.replace("'", "\\'")
                 val urlEscaped = update.downloadUrl.replace("'", "\\'")
-                webView.evaluateJavascript(
-                    "window.__hxNativeUpdateAvailable && window.__hxNativeUpdateAvailable('$escaped','$urlEscaped')",
-                    null
-                )
+                runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.__hxNativeUpdateAvailable && window.__hxNativeUpdateAvailable('$escaped','$urlEscaped')",
+                        null
+                    )
+                }
             }
         }
     }
