@@ -64,6 +64,16 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_msg_timestamp ON messages(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_msg_unread ON messages(is_read);
 
+-- 8. Deleted Messages Tombstone (记录被删除的消息 ID，供离线设备同步)
+-- 客户端上线时通过 GET /api/messages/deleted?since=<timestamp> 拉取
+-- cron 定时清理超过 30 天的墓碑记录
+CREATE TABLE IF NOT EXISTS deleted_messages (
+    message_id TEXT NOT NULL,
+    deleted_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_deleted_at ON deleted_messages(deleted_at);
+
 -- 4. Web Push Subscriptions
 CREATE TABLE IF NOT EXISTS push_subscriptions (
     id TEXT PRIMARY KEY,

@@ -73,6 +73,7 @@ export function useMessageReceiver() {
   const recipientToken = useAuthStore((s) => s.recipientToken);
   const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
   const fetchAndDecrypt = useMessageStore((s) => s.fetchAndDecrypt);
+  const syncFromServer = useMessageStore((s) => s.syncFromServer);
   const addMessage = useMessageStore((s) => s.addMessage);
   const removeMessages = useMessageStore((s) => s.removeMessages);
   const applyStarSync = useMessageStore((s) => s.applyStarSync);
@@ -161,11 +162,11 @@ export function useMessageReceiver() {
     return () => navigator.serviceWorker.removeEventListener("message", handler);
   }, [decryptAndInsert]);
 
-  // Layer 3: Initial load
+  // Layer 3: Initial load — 先加载本地缓存，再增量同步服务器（包含分页拉取新消息 + 墓碑删除同步）
   useEffect(() => {
     loadCached();
     if (recipientToken && privateKeyHex) {
-      fetchAndDecrypt(recipientToken, privateKeyHex);
+      syncFromServer(recipientToken, privateKeyHex);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

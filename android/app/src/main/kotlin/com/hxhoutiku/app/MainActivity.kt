@@ -176,6 +176,13 @@ class MainActivity : AppCompatActivity() {
                 // Inject safe-area CSS variables for notch/status bar
                 injectSafeAreaInsets()
 
+                // 页面加载完成后主动推送当前 WS 连接状态给 WebView
+                // 解决冷启动时序问题：原生 WS 服务可能在 WebView 注册回调之前就已发送状态广播
+                // 参考: https://developer.android.com/reference/android/webkit/WebView#evaluateJavascript
+                if (url != null && !url.startsWith("file:///android_asset/offline")) {
+                    pushCurrentWsStatus()
+                }
+
                 // 页面加载完成后延迟检查更新
                 // 必须等 React 挂载完毕并注册 window.__hxNativeUpdateAvailable 回调
                 // 否则 evaluateJavascript 调用时回调函数还不存在
@@ -352,6 +359,29 @@ class MainActivity : AppCompatActivity() {
                         null
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * 页面加载完成后，延迟推送当前 WS 连接状态给 WebView。
+     * 解决冷启动时序问题：原生 HxWebSocketService 可能在 JS 注册
+     * window.__hxNativeWsStatus 回调之前就已经发送了 connected 广播，
+     * 导致 WebView 端状态丢失，始终显示"离线"。
+     *
+     * 延迟 1.5 秒确保 React 已挂载并通过 wsInit() 注册了回调函数。
+     * 参考: https://developer.android.com/reference/android/webkit/WebView#evaluateJavascript
+     */
+    private fun pushCurrentWsStatus() {
+        scope.launch {
+            delay(1500)
+            val wsConnected = HxWebSocketService.isConnected
+            val statusStr = if (wsConnected) "connected" else "disconnected"
+            runOnUiThread {
+                webView.evaluateJavascript(
+                    "window.__hxNativeWsStatus && window.__hxNativeWsStatus('$statusStr')",
+                    null
+                )
             }
         }
     }

@@ -26,5 +26,10 @@ export async function handleScheduled(env: Env): Promise<void> {
     env.DB.prepare(
       "DELETE FROM messages WHERE expires_at > 0 AND expires_at < ?"
     ).bind(now),
+
+    // 清理超过 30 天的墓碑记录（离线超过 30 天的设备需要全量重置缓存）
+    env.DB.prepare(
+      "DELETE FROM deleted_messages WHERE deleted_at < ?"
+    ).bind(thirtyDaysAgo),
   ]);
 }

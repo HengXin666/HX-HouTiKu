@@ -88,13 +88,14 @@ export interface MessagesResponse {
 
 export function fetchMessages(
   token: string,
-  params: { since?: number; limit?: number; group?: string; priority?: string } = {}
+  params: { since?: number; limit?: number; group?: string; priority?: string; order?: "asc" | "desc" } = {}
 ): Promise<MessagesResponse> {
   const query = new URLSearchParams();
   if (params.since) query.set("since", String(params.since));
   if (params.limit) query.set("limit", String(params.limit));
   if (params.group) query.set("group", params.group);
   if (params.priority) query.set("priority", params.priority);
+  if (params.order) query.set("order", params.order);
   const qs = query.toString();
   return request(`/api/messages${qs ? `?${qs}` : ""}`, { token });
 }
@@ -119,6 +120,15 @@ export function deleteMessages(
     token,
     body: JSON.stringify({ message_ids: messageIds }),
   });
+}
+
+/** 拉取指定时间之后被删除的消息 ID（墓碑同步，支持分页） */
+export function fetchDeletedIds(
+  token: string,
+  since: number,
+  limit = 500
+): Promise<{ deleted_ids: string[]; latest_deleted_at: number; has_more: boolean }> {
+  return request(`/api/messages/deleted?since=${since}&limit=${limit}`, { token });
 }
 
 export function setMessageStarred(

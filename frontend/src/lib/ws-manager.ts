@@ -116,8 +116,10 @@ async function doConnect() {
   if (!token) return;
   // Android 上由原生 HxWebSocketService 维护唯一的 WS 连接
   // WebView 内不再建立 JS WS，避免重复连接占用服务端资源
+  // 不再乐观设置 connected，而是设置 connecting 等待原生服务的实际状态回调
+  // 参考: https://developer.android.com/reference/android/webkit/WebView#addJavascriptInterface
   if (isNativeAndroid) {
-    setStatus("connected");
+    setStatus("connecting");
     return;
   }
   if (ws && ws.readyState === WebSocket.OPEN) return;
@@ -187,11 +189,19 @@ function handleVisibility() {
   const away = hiddenSince;
   hiddenSince = null;
 
-  // Always try to reconnect if WS is down
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    reconnectAttempt = 0;
-    clearTimers();
-    doConnect();
+  // Android: 原生服务维护 WS 连接，不需要 JS 端重连
+  // 仅在非 connected 状态时设置 connecting，避免覆盖已有的 connected 状态
+  if (isNativeAndroid) {
+    if (status !== "connected") {
+      setStatus("connecting");
+    }
+  } else {
+    // Web: 如果 WS 断开，立即重连
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      reconnectAttempt = 0;
+      clearTimers();
+      doConnect();
+    }
   }
 
   // If away for a long time, notify listeners to do a server catchup
@@ -223,7 +233,8 @@ export function wsInit(recipientToken: string) {
             for (const fn of starSyncListeners) fn({ message_ids: parsed.message_ids, starred: parsed.starred });
           } else if (parsed.type === "connected") {
             deviceCount = parsed.device_count ?? 1;
-            for (const fn of statusListeners) fn(status, deviceCount);
+            // 收到 connected 类型的 WS 消息也意味着连接已建立
+            setStatus("connected");
           }
         } catch { /* ignore */ }
       };
@@ -235,6 +246,11 @@ export function wsInit(recipientToken: string) {
     }
   }
   // If already connected with same token, skip
+  // Android: ws 始终为 null，通过 status 判断是否已连接
+  if (isNativeAndroid) {
+    if (status !== "connected") doConnect();
+    return;
+  }
   if (ws && ws.readyState === WebSocket.OPEN) return;
   doConnect();
 }

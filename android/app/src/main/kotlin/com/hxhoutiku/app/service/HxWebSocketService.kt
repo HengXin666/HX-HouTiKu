@@ -89,6 +89,15 @@ class HxWebSocketService : Service() {
         @Volatile
         var isAppInForeground = false
 
+        /**
+         * 当前 WebSocket 连接状态，供 MainActivity 在页面加载完成后
+         * 主动推送给 WebView，解决冷启动时 JS 回调尚未注册导致状态丢失的问题。
+         * 参考: https://developer.android.com/develop/background-work/services/foreground-services
+         */
+        @Volatile
+        var isConnected = false
+            private set
+
         @Volatile
         private var onMessageListener: WsMessageListener? = null
 
@@ -241,6 +250,7 @@ class HxWebSocketService : Service() {
 
     override fun onDestroy() {
         isUserInitiatedDisconnect = true
+        isConnected = false
         // 服务销毁时优雅关闭连接
         val ws = webSocket
         webSocket = null
@@ -316,6 +326,7 @@ class HxWebSocketService : Service() {
             Log.i(TAG, "WebSocket connected")
             // 仅当这是最新创建的连接时才更新引用
             this@HxWebSocketService.webSocket = webSocket
+            isConnected = true
             resetBackoff()
             schedulePing()
             broadcast(MSG_WS_CONNECTED, """{"connected":true}""")
@@ -343,6 +354,7 @@ class HxWebSocketService : Service() {
             // 仅当关闭的是当前活跃连接时才处理，避免旧连接回调干扰新连接
             if (this@HxWebSocketService.webSocket !== webSocket) return
             this@HxWebSocketService.webSocket = null
+            isConnected = false
             cancelPing()
             broadcast(MSG_WS_DISCONNECTED, """{"code":$code,"reason":"$reason"}""")
             scheduleReconnect()
@@ -353,6 +365,7 @@ class HxWebSocketService : Service() {
             // 仅当失败的是当前活跃连接时才处理
             if (this@HxWebSocketService.webSocket !== webSocket) return
             this@HxWebSocketService.webSocket = null
+            isConnected = false
             cancelPing()
             broadcast(MSG_WS_ERROR, """{"error":"${t.message}"}""")
             scheduleReconnect()

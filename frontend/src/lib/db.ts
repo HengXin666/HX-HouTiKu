@@ -121,6 +121,23 @@ export async function getCachedMessages(limit = 100): Promise<CachedMessage[]> {
   return all.reverse().slice(0, limit);
 }
 
+// 项目诞生前的时间戳，首次加载时作为增量同步的起点
+const PROJECT_EPOCH = new Date("2026-01-01T00:00:00Z").getTime();
+
+/** 获取上次成功同步到的消息时间戳（仅在收到消息时更新，非实时计算） */
+export async function getLastMessageSyncTs(): Promise<number> {
+  return (await getPref<number>("lastMessageSyncTs")) ?? PROJECT_EPOCH;
+}
+
+/** 更新同步到的消息时间戳（传入本批次最新消息的 timestamp） */
+export async function setLastMessageSyncTs(ts: number): Promise<void> {
+  const current = await getLastMessageSyncTs();
+  // 只允许前进，不允许回退
+  if (ts > current) {
+    await setPref("lastMessageSyncTs", ts);
+  }
+}
+
 export async function markCachedRead(ids: string[]): Promise<void> {
   const db = await getDB();
   const tx = db.transaction("messages", "readwrite");
@@ -141,6 +158,16 @@ export async function deleteCachedMessages(ids: string[]): Promise<void> {
     await tx.store.delete(id);
   }
   await tx.done;
+}
+
+/** 获取上次墓碑同步的时间戳（毫秒），首次默认为项目诞生时间 */
+export async function getLastSyncTime(): Promise<number> {
+  return (await getPref<number>("lastDeleteSyncTime")) ?? PROJECT_EPOCH;
+}
+
+/** 保存墓碑同步时间戳 */
+export async function setLastSyncTime(ts: number): Promise<void> {
+  await setPref("lastDeleteSyncTime", ts);
 }
 
 export async function clearMessages(): Promise<void> {

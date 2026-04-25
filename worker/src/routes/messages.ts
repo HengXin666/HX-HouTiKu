@@ -4,6 +4,26 @@ import { authRecipientToken } from "../auth";
 
 const app = new Hono<{ Bindings: Env; Variables: { recipientId?: string } }>();
 
+// GET /api/messages/deleted — 返回指定时间之后被删除的消息 ID 列表（墓碑查询）
+// 客户端上线时调用，用于同步离线期间其他设备删除的消息
+app.get("/deleted", authRecipientToken(), async (c) => {
+  const since = Number(c.req.query("since") || "0");
+  const limit = Math.min(Number(c.req.query("limit") || "500"), 1000);
+
+  const result = await c.env.DB.prepare(
+    "SELECT message_id, deleted_at FROM deleted_messages WHERE deleted_at > ? ORDER BY deleted_at ASC LIMIT ?"
+  ).bind(since, limit + 1).all<{ message_id: string; deleted_at: number }>();
+
+  const hasMore = result.results.length > limit;
+  const rows = result.results.slice(0, limit);
+
+  return c.json({
+    deleted_ids: rows.map((r) => r.message_id),
+    latest_deleted_at: rows.length > 0 ? rows[rows.length - 1].deleted_at : since,
+    has_more: hasMore,
+  });
+});
+
 // GET /api/messages — pull encrypted messages (global, shared across all devices)
 app.get("/", authRecipientToken(), async (c) => {
   const since = Number(c.req.query("since") || "0");
@@ -30,7 +50,9 @@ app.get("/", authRecipientToken(), async (c) => {
     params.push(channelId);
   }
 
-  query += " ORDER BY timestamp DESC LIMIT ?";
+  // order=asc 用于增量同步场景：从旧到新拉取，方便客户端循环推进 since
+  const order = c.req.query("order") === "asc" ? "ASC" : "DESC";
+  query += ` ORDER BY timestamp ${order} LIMIT ?`;
   params.push(limit + 1);
 
   const stmt = c.env.DB.prepare(query);
@@ -136,7 +158,7 @@ app.get("/starred", authRecipientToken(), async (c) => {
   return c.json({ starred_ids: result.results.map((r) => r.id) });
 });
 
-// DELETE /api/messages — permanently delete messages + sync to other devices
+// DELETE /api/messages — 删除消息 + 写入墓碑表 + 同步到其他设备
 app.delete("/", authRecipientToken(), async (c) => {
   const { message_ids } = await c.req.json<{ message_ids: string[] }>();
 
@@ -144,10 +166,21 @@ app.delete("/", authRecipientToken(), async (c) => {
     return c.json({ error: "message_ids required" }, 400);
   }
 
+  const now = Date.now();
   const placeholders = message_ids.map(() => "?").join(",");
-  await c.env.DB.prepare(
-    `DELETE FROM messages WHERE id IN (${placeholders})`
-  ).bind(...message_ids).run();
+
+  // 批量执行：删除消息 + 写入墓碑记录
+  const statements = [
+    c.env.DB.prepare(
+      `DELETE FROM messages WHERE id IN (${placeholders})`
+    ).bind(...message_ids),
+    ...message_ids.map((id) =>
+      c.env.DB.prepare(
+        "INSERT INTO deleted_messages (message_id, deleted_at) VALUES (?, ?)"
+      ).bind(id, now)
+    ),
+  ];
+  await c.env.DB.batch(statements);
 
   // Broadcast delete event to all online devices via DO WebSocket
   const allRecipients = await c.env.DB.prepare(
