@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.hxhoutiku.app.HxApp
@@ -53,6 +55,7 @@ class HxWebSocketService : Service() {
     private var reconnectHandler: Handler? = null
     private var reconnectDelayMs = RECONNECT_BASE_DELAY_MS
     private var isUserInitiatedDisconnect = false
+    private var wakeLock: PowerManager.WakeLock? = null
 
     // Cached credentials set by startAction / updateCredentials
     private var wsUrl: String = ""
@@ -144,6 +147,7 @@ class HxWebSocketService : Service() {
         super.onCreate()
         createNotificationChannel()
         startForegroundNotification()
+        acquireWakeLock()
 
         client = OkHttpClient.Builder()
             .pingInterval(0, TimeUnit.SECONDS) // We manage pings ourselves
@@ -191,9 +195,43 @@ class HxWebSocketService : Service() {
 
     override fun onBind(intent: Intent?) = null
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // 用户划掉应用时，通过 AlarmManager 重启服务以保持后台推送
+        if (!isUserInitiatedDisconnect && wsUrl.isNotBlank()) {
+            Log.i(TAG, "Task removed — scheduling service restart")
+            val restartIntent = Intent(this, HxWebSocketService::class.java).apply {
+                action = ACTION_START
+                putExtra(EXTRA_WS_URL, wsUrl)
+                putExtra(EXTRA_TOKEN, recipientToken)
+                putExtra(EXTRA_RECIPIENT_ID, recipientId)
+            }
+            val pi = PendingIntent.getService(
+                this, 1, restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 2000, pi)
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        // 低内存时不释放核心资源，仅记录日志
+        Log.w(TAG, "Low memory warning — keeping WS connection alive")
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_MODERATE) {
+            Log.w(TAG, "Trim memory level=$level — WS connection preserved")
+        }
+    }
+
     override fun onDestroy() {
         isUserInitiatedDisconnect = true
         disconnect()
+        releaseWakeLock()
         pingHandler?.removeCallbacksAndMessages(null)
         pingHandler = null
         reconnectHandler?.removeCallbacksAndMessages(null)
@@ -469,6 +507,33 @@ class HxWebSocketService : Service() {
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
+    }
+
+    // ─── WakeLock Management ────────────────────────────────────
+
+    private fun acquireWakeLock() {
+        if (wakeLock == null) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "HxHouTiKu::WsWakeLock"
+            ).apply {
+                // 持有部分唤醒锁，防止CPU休眠导致WS断连
+                // 设置超时避免永久持有（24小时后自动释放，服务会重新获取）
+                acquire(24 * 60 * 60 * 1000L)
+            }
+            Log.d(TAG, "WakeLock acquired")
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+                Log.d(TAG, "WakeLock released")
+            }
+        }
+        wakeLock = null
     }
 
     // ─── Message Delivery ───────────────────────────────────────

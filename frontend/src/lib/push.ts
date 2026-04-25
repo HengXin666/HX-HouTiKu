@@ -120,3 +120,45 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   if (Notification.permission === "granted") return "granted";
   return Notification.requestPermission();
 }
+
+/**
+ * 在前台页面中触发操作系统级别的通知。
+ * 用于 PC 浏览器：当页面在后台标签页时，Web Push 可能不触发，
+ * 但通过 Notification API 可以直接弹出系统通知。
+ */
+export function showBrowserNotification(
+  title: string,
+  body: string,
+  options?: { tag?: string; messageId?: string; priority?: string },
+): void {
+  if (isNativeAndroid) return;
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  const tag = options?.tag ?? `hx-msg-${options?.messageId ?? Date.now()}`;
+  const priority = options?.priority ?? "default";
+
+  const vibrate = priority === "urgent"
+    ? [200, 100, 200, 100, 200]
+    : priority === "high"
+      ? [200, 100, 200]
+      : [100];
+
+  const notification = new Notification(title, {
+    body,
+    icon: "/icons/icon-192x192.png",
+    badge: "/icons/icon-192x192.png",
+    tag,
+    vibrate,
+    requireInteraction: priority === "urgent",
+  });
+
+  notification.onclick = () => {
+    window.focus();
+    if (options?.messageId) {
+      window.location.hash = "";
+      window.location.href = `/message/${options.messageId}`;
+    }
+    notification.close();
+  };
+}

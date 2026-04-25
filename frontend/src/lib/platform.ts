@@ -19,6 +19,10 @@ export interface HxNativeBridge {
   getFcmToken(): void;
   registerFcmPush(apiBase: string, recipientToken: string): void;
   showToast(message: string): void;
+  startWebSocket(wsUrl: string, token: string, recipientId: string): void;
+  stopWebSocket(): void;
+  updateWsCredentials(token: string, recipientId: string): void;
+  saveApiBase(url: string): void;
 }
 
 declare global {
@@ -27,6 +31,8 @@ declare global {
     __hxNativeFcmCallback?: (token: string | null) => void;
     __hxNativeFcmRegisterCallback?: (statusCode: number) => void;
     __hxNativeNotificationCallback?: (status: string) => void;
+    __hxNativeWsMessage?: (data: string) => void;
+    __hxNativeWsStatus?: (status: string) => void;
   }
 }
 

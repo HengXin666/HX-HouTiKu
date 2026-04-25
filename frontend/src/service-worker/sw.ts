@@ -6,6 +6,21 @@ import { precacheAndRoute } from "workbox-precaching";
 // Workbox precache (injected by vite-plugin-pwa)
 precacheAndRoute(self.__WB_MANIFEST);
 
+// 确保新 Service Worker 立即激活并接管所有客户端
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 // ====== Web Push Listener ======
 
 interface PushMessage {

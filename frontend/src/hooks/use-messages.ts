@@ -21,6 +21,7 @@ import {
   type WsNewMessagePayload,
 } from "@/lib/ws-manager";
 import { decryptMessage } from "@/lib/crypto";
+import { showBrowserNotification } from "@/lib/push";
 
 // ─── Notification queue (consumed by NotificationToast) ──────
 
@@ -52,6 +53,18 @@ function emitNotification(msg: Message) {
     timestamp: msg.timestamp,
   };
   for (const fn of notifyListeners) fn(n);
+
+  // PC浏览器: 当页面在后台标签页或最小化时，触发操作系统级别通知
+  // 低优先级和调试消息不触发系统通知
+  if (msg.priority !== "low" && msg.priority !== "debug") {
+    const groupLabel = msg.group || "general";
+    const priorityLabel = msg.priority === "urgent" ? "紧急" : msg.priority === "high" ? "重要" : "新";
+    showBrowserNotification(
+      `${groupLabel} · ${priorityLabel}消息`,
+      msg.title || "点击查看详情",
+      { tag: `hx-${msg.priority}-${groupLabel}`, messageId: msg.id, priority: msg.priority },
+    );
+  }
 }
 
 // ─── useMessageReceiver — GLOBAL (mount once in AppShell) ────

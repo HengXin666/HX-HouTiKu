@@ -10,8 +10,11 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings as AndroidSettings
 import android.util.Log
 import android.view.View
 import android.view.Window
@@ -136,6 +139,9 @@ class MainActivity : AppCompatActivity() {
 
         // Request notification permission proactively on first launch
         requestNotificationPermissionIfNeeded()
+
+        // Request battery optimization exemption for background WS service
+        requestBatteryOptimizationExemption()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -275,6 +281,22 @@ class MainActivity : AppCompatActivity() {
                 != PackageManager.PERMISSION_GRANTED
             ) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = Intent(AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Log.w("MainActivity", "Failed to request battery optimization exemption", e)
+                }
             }
         }
     }

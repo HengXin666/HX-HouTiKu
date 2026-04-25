@@ -1,0 +1,37 @@
+# HX-HouTiKu — Cloudflare Email Worker 配置
+#
+# 使用方式:
+#   1. 复制此文件: cp wrangler.example.toml wrangler.toml
+#   2. 填入你的 HX-HouTiKu API 地址和令牌
+#   3. 部署: npx wrangler deploy
+#   4. 在 Cloudflare Dashboard → Email Routing → Email Workers 中绑定此 Worker
+
+name = "hx-houtiku-email"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+# HX-HouTiKu 后端 API 地址
+HOUTIKU_API_BASE = "https://houtiku.api.example.com"
+
+# 转发目标邮箱
+FORWARD_TO = "your-real-email@gmail.com"
+
+# 消息分组名 (可选, 默认 "email")
+EMAIL_GROUP = "email"
+
+# 默认优先级 (可选, 默认 "default")
+EMAIL_PRIORITY = "default"
+
+# 频道 ID (可选, 默认 "email")
+EMAIL_CHANNEL = "email"
+
+# 优先级规则 (JSON 字符串, 可选)
+# 按顺序匹配, 命中第一条即停止
+# 支持的 match 前缀: from: / subject: / to:
+# 示例:
+# PRIORITY_RULES = '[{"match":"from:alert@","priority":"urgent","group":"alerts"},{"match":"subject:CI","priority":"high","group":"ci-cd"},{"match":"from:noreply@github.com","priority":"default","group":"github"}]'
+
+# 以下密钥通过 `wrangler secret put` 设置:
+#   npx wrangler secret put HOUTIKU_TOKEN
+#   → 输入你的 HX-HouTiKu ADMIN_TOKEN

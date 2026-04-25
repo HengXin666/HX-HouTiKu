@@ -612,6 +612,115 @@ GET /api/image-proxy?url=https://i0.hdslb.com/xxx.jpg
 
 ---
 
+## Cloudflare Email Worker SDK
+
+将 Cloudflare 免费邮件转发与 HX-HouTiKu 集成: 收到邮件时自动推送通知, 然后继续转发到目标邮箱。
+
+### 工作原理
+
+```
+发件人 → Cloudflare Email Routing → Email Worker (hook) → HX-HouTiKu API
+                                          ↓
+                                    转发到目标邮箱
+```
+
+- 使用 Cloudflare Email Routing 的 **Email Worker** 功能(免费)
+- 每封邮件触发一次 Worker 调用, 计入 Workers 免费额度(10万/天)
+- 使用 `/api/test-push` 接口(服务端加密), 因为 CF Workers 不支持 secp256k1 曲线
+
+### 部署步骤
+
+#### 1. 安装依赖
+
+```bash
+cd sdk/cf-email-worker
+pnpm install
+```
+
+#### 2. 配置
+
+```bash
+cp wrangler.example.toml wrangler.toml
+```
+
+编辑 `wrangler.toml`:
+
+```toml
+[vars]
+HOUTIKU_API_BASE = "https://houtiku.api.example.com"  # 你的 HX-HouTiKu API 地址
+FORWARD_TO = "your-real-email@gmail.com"               # 转发目标邮箱
+EMAIL_GROUP = "email"                                   # 消息分组名
+EMAIL_PRIORITY = "default"                              # 默认优先级
+EMAIL_CHANNEL = "email"                                 # 频道 ID
+```
+
+设置密钥:
+
+```bash
+npx wrangler secret put HOUTIKU_TOKEN
+# → 输入你的 HX-HouTiKu ADMIN_TOKEN
+```
+
+#### 3. 部署
+
+```bash
+npx wrangler deploy
+```
+
+#### 4. 绑定 Email Routing
+
+1. 打开 Cloudflare Dashboard → 你的域名 → **Email Routing**
+2. 确保 Email Routing 已启用
+3. 进入 **Email Workers** 标签页
+4. 点击 **Create** 或选择已部署的 `hx-houtiku-email` Worker
+5. 在 **Routing rules** 中添加规则:
+   - **Custom address**: 填入你想接收邮件的地址(如 `notify@yourdomain.com`)
+   - **Action**: 选择 **Send to a Worker** → 选择 `hx-houtiku-email`
+
+### 优先级规则配置
+
+通过 `PRIORITY_RULES` 环境变量配置自动分类规则:
+
+```toml
+# wrangler.toml 中配置
+[vars]
+PRIORITY_RULES = '[{"match":"from:alert@","priority":"urgent","group":"alerts"},{"match":"subject:CI","priority":"high","group":"ci-cd"},{"match":"from:noreply@github.com","priority":"default","group":"github"}]'
+```
+
+规则格式:
+
+| 字段 | 说明 |
+|------|------|
+| `match` | 匹配模式, 支持前缀: `from:` / `subject:` / `to:`, 不带前缀则匹配 subject |
+| `priority` | 命中后的优先级: `urgent` / `high` / `default` / `low` / `debug` |
+| `group` | 命中后的分组名(可选, 不填则使用默认 `EMAIL_GROUP`) |
+
+规则按顺序匹配, 命中第一条即停止。
+
+#### 示例: 区分告警邮件和 CI 通知
+
+```json
+[
+  {"match": "from:alertmanager@", "priority": "urgent", "group": "alerts"},
+  {"match": "from:grafana@", "priority": "high", "group": "monitoring"},
+  {"match": "subject:build failed", "priority": "high", "group": "ci-cd"},
+  {"match": "subject:build succeeded", "priority": "low", "group": "ci-cd"},
+  {"match": "from:noreply@github.com", "priority": "default", "group": "github"}
+]
+```
+
+### CF 免费额度说明
+
+| 资源 | 免费额度 | Email Worker 消耗 |
+|------|---------|-------------------|
+| Email Routing | 无限转发 | 0 (转发本身免费) |
+| Workers 请求 | 10万/天 | 每封邮件 1 次 |
+| Workers CPU | 10ms/请求 | 约 2-5ms/封邮件 |
+
+> 即使每天收 100 封邮件, 也只消耗 0.1% 的免费额度。
+
+---
+
 ## 消息存储模型
 
 消息采用**全局共享**模型:

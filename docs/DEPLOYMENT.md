@@ -725,6 +725,84 @@ npx wrangler tail
 
 ---
 
+## 消息分类配置
+
+HX-HouTiKu 通过 `priority`、`group`、`channel_id` 三个维度对消息进行分类, 不同分类决定了通知的展示方式和推送行为。
+
+### 分类维度说明
+
+| 维度 | 作用 | 示例值 | 说明 |
+|------|------|--------|------|
+| `priority` | 控制通知的紧急程度和推送方式 | `urgent` / `high` / `default` / `low` / `debug` | 决定是否弹窗、震动、声音 |
+| `group` | 消息来源/场景分组 | `ci-cd` / `alerts` / `daily` / `crawler` | 前端按分组归类显示 |
+| `channel_id` | 频道(可选, 更粗粒度的分类) | `monitoring` / `notifications` / `default` | 用于频道级别的过滤 |
+
+### 典型场景配置
+
+#### CI/CD 通知
+
+```python
+# CI 构建成功
+push("构建成功 ✅", f"分支 main, 提交 {sha[:8]}", priority="default", group="ci-cd", channel_id="ci")
+
+# CI 构建失败
+push("构建失败 ❌", f"分支 {branch}, 错误: {error}", priority="high", group="ci-cd", channel_id="ci")
+
+# 部署完成
+push("部署完成 🚀", f"v{version} 已部署到生产环境", priority="default", group="ci-cd", channel_id="ci")
+```
+
+#### 监控告警
+
+```python
+# CPU 告警
+push("⚠️ CPU 告警", f"CPU: {cpu}%", priority="urgent" if cpu > 95 else "high", group="alerts", channel_id="monitoring")
+
+# 服务宕机
+push("🔴 服务宕机", f"{service_name} 无响应", priority="urgent", group="alerts", channel_id="monitoring")
+
+# 恢复通知
+push("✅ 服务恢复", f"{service_name} 已恢复正常", priority="default", group="alerts", channel_id="monitoring")
+```
+
+#### 日常通知
+
+```python
+# 日报
+push("📊 日报", report_content, priority="low", group="daily", channel_id="notifications")
+
+# 爬虫结果
+push("🕷️ 爬虫完成", f"抓取 {count} 条数据", priority="low", group="crawler", channel_id="notifications")
+```
+
+### 推送行为对照表
+
+| 优先级 | Android 通知 | PC Web Push | 声音 | 震动 | 锁屏显示 |
+|--------|-------------|-------------|------|------|---------|
+| `urgent` | 全屏弹窗 + 持续震动 | 系统通知 + 持续显示 | ✅ | ✅ 长震动 | ✅ |
+| `high` | 弹窗 + 震动 | 系统通知 | ✅ | ✅ 短震动 | ✅ |
+| `default` | 静默通知 | 系统通知 | ✅ | ❌ | ❌ |
+| `low` | 仅 WebSocket 实时送达 | 仅 WebSocket 实时送达 | ❌ | ❌ | ❌ |
+| `debug` | 仅 WebSocket 实时送达 | 仅 WebSocket 实时送达 | ❌ | ❌ | ❌ |
+
+> `low` 和 `debug` 级别的消息不会触发系统推送通知, 但会通过 WebSocket 实时送达在线设备, 在应用内可以查看。
+
+### group_key 的使用
+
+`group_key` 用于关联同一来源的多条消息, 例如同一个 CI 构建的多个阶段:
+
+```python
+build_id = "build-12345"
+
+push("编译开始", "正在编译...", group="ci-cd", group_key=build_id, priority="low")
+push("测试通过", "42 个测试全部通过", group="ci-cd", group_key=build_id, priority="default")
+push("部署完成", "v2.1.0 已上线", group="ci-cd", group_key=build_id, priority="high")
+```
+
+前端会将相同 `group_key` 的消息关联展示, 方便追踪完整流程。
+
+---
+
 ## 常见问题
 
 ### Q: 中国大陆访问 workers.dev 很慢/完全不通
