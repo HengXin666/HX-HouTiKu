@@ -27,8 +27,8 @@ getApiBase().then((base) => { cachedApiBase = base; });
 function proxyImageUrl(src: string | undefined): string | undefined {
   if (!src) return src;
 
-  // Don't proxy data URIs or blob URIs
-  if (src.startsWith("data:") || src.startsWith("blob:")) return src;
+  // Don't proxy data URIs, blob URIs, or cid: references
+  if (src.startsWith("data:") || src.startsWith("blob:") || src.startsWith("cid:")) return src;
 
   // Don't proxy our own API
   if (cachedApiBase && src.startsWith(cachedApiBase)) return src;
@@ -249,24 +249,12 @@ const SHADOW_STYLES = `
     color: inherit;
     font-family: inherit;
   }
-  *, *::before, *::after { box-sizing: border-box; }
   img {
     max-width: 100%;
     height: auto;
-    border-radius: 12px;
   }
   a { color: #1d9bf0; text-decoration: none; }
   a:hover { text-decoration: underline; }
-  h1, h2, h3, h4, h5, h6 { margin: 0.75em 0 0.5em; font-weight: 700; }
-  p { margin: 0 0 0.75em; }
-  ul, ol { padding-left: 1.5em; margin-bottom: 0.75em; }
-  li { margin-bottom: 0.25em; }
-  blockquote {
-    border-left: 3px solid #1d9bf0;
-    padding-left: 1em;
-    margin: 0.75em 0;
-    opacity: 0.85;
-  }
   pre {
     background: rgba(0,0,0,0.15);
     border-radius: 12px;
@@ -278,18 +266,6 @@ const SHADOW_STYLES = `
     font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
     font-size: 0.9em;
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0.75em 0;
-    font-size: 0.875em;
-  }
-  th, td {
-    border: 1px solid rgba(128,128,128,0.3);
-    padding: 0.5em 0.75em;
-    text-align: left;
-  }
-  th { font-weight: 600; background: rgba(0,0,0,0.1); }
 `;
 
 function HtmlRenderer({ content }: { content: string }) {
