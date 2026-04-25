@@ -155,12 +155,9 @@ PRIORITY_RULES = '[{"match":"from:alert@","priority":"urgent","group":"alerts"},
 每封邮件推送到 HX-HouTiKu 后, 消息格式为:
 
 - **标题**: `📧 {邮件主题}`
-- **正文** (Markdown):
-  ```
-  **发件人**: sender@example.com
-  **收件人**: you@yourdomain.com
-  **时间**: Mon, 01 Jan 2024 08:00:00 +0000
-  ```
+- **正文** (HTML):
+  - 头部信息: 发件人 (可点击 mailto 链接)、收件人 (可点击 mailto 链接)、时间
+  - 分隔线后为邮件原文 (HTML 邮件原样保留, 纯文本邮件用 `<pre>` 包裹)
 - **分组键** (`group_key`): `email-{发件人地址}` (同一发件人的邮件会归为一组)
 
 ## CF 免费额度说明

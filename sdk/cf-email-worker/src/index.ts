@@ -85,8 +85,9 @@ export default {
     const subject = parsed.subject || message.headers.get("subject") || "(无主题)";
     const date = parsed.date || message.headers.get("date") || new Date().toISOString();
 
-    const emailBody = parsed.text || parsed.html || "";
-    const isHtml = !parsed.text && !!parsed.html;
+    // 优先使用 HTML 版本 (邮箱客户端展示的精美格式), 没有 HTML 才回退到纯文本
+    const emailBody = parsed.html || parsed.text || "";
+    const isHtml = !!parsed.html;
 
     // 构建 CID -> data URI 映射 (内嵌图片)
     const cidMap = new Map<string, string>();
@@ -329,16 +330,36 @@ function buildGitHubBody(email: ParsedEmail, gh: GitHubInfo): string {
     parts.push(`<p>📎 <b>附件</b>: ${names} (请到邮箱查看)</p>`);
   }
 
-  // 邮件正文
+  // 邮件正文 (原样保留，不做格式修改)
   if (email.body) {
     if (email.isHtml) {
       parts.push(`<hr/>\n${replaceCidImages(email.body, email.cidMap)}`);
     } else {
-      parts.push(`<hr/>\n${plainTextToHtml(email.body)}`);
+      parts.push(`<hr/>\n<pre style="white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(email.body)}</pre>`);
     }
   }
 
   return parts.join("\n");
+}
+
+// 格式化邮箱地址为可点击的 mailto 链接
+function formatEmailLink(display: string): string {
+  // 从 display 中提取纯邮箱地址
+  const addrMatch = display.match(/<([^>]+)>/);
+  if (addrMatch) {
+    // 格式: "Name <email@example.com>"
+    const addr = addrMatch[1];
+    const name = display.slice(0, display.indexOf("<")).trim();
+    if (name) {
+      return `${escapeHtml(name)} &lt;<a href="mailto:${encodeURI(addr)}">${escapeHtml(addr)}</a>&gt;`;
+    }
+    return `<a href="mailto:${encodeURI(addr)}">${escapeHtml(addr)}</a>`;
+  }
+  // 纯邮箱地址
+  if (display.includes("@")) {
+    return `<a href="mailto:${encodeURI(display)}">${escapeHtml(display)}</a>`;
+  }
+  return escapeHtml(display);
 }
 
 // 构建普通邮件推送正文
@@ -346,8 +367,8 @@ function buildGenericBody(email: ParsedEmail): string {
   const timeStr = formatBeijingTime(email.date);
   const parts: string[] = [];
 
-  parts.push(`<p><b>发件人</b>: ${escapeHtml(email.fromDisplay)}</p>`);
-  parts.push(`<p><b>收件人</b>: ${escapeHtml(email.to)}</p>`);
+  parts.push(`<p><b>发件人</b>: ${formatEmailLink(email.fromDisplay)}</p>`);
+  parts.push(`<p><b>收件人</b>: ${formatEmailLink(email.to)}</p>`);
   parts.push(`<p><b>时间</b>: 北京时间 ${escapeHtml(timeStr)}</p>`);
 
   // 附件提示
@@ -356,27 +377,19 @@ function buildGenericBody(email: ParsedEmail): string {
     parts.push(`<p>📎 <b>附件</b>: ${names} (请到邮箱查看)</p>`);
   }
 
-  // 邮件正文
+  // 邮件正文 (原样保留，不做格式修改)
   if (email.body) {
     if (email.isHtml) {
       parts.push(`<hr/>\n${replaceCidImages(email.body, email.cidMap)}`);
     } else {
-      parts.push(`<hr/>\n${plainTextToHtml(email.body)}`);
+      parts.push(`<hr/>\n<pre style="white-space:pre-wrap;word-break:break-word;margin:0">${escapeHtml(email.body)}</pre>`);
     }
   }
 
   return parts.join("\n");
 }
 
-// 将纯文本转为 HTML 段落 (不使用 <pre>，避免水平滚动)
-function plainTextToHtml(text: string): string {
-  const escaped = escapeHtml(text);
-  // 按空行分段，每段用 <p> 包裹；段内换行用 <br/>
-  return escaped
-    .split(/\n{2,}/)
-    .map((para) => `<p style="white-space:pre-wrap;word-break:break-word;margin:0.5em 0">${para.replace(/\n/g, "<br/>")}</p>`)
-    .join("\n");
-}
+
 
 // 将 HTML 中的 cid: 引用替换为 base64 data URI
 function replaceCidImages(html: string, cidMap: Map<string, string>): string {
