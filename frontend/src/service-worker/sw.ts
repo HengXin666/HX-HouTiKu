@@ -115,9 +115,10 @@ self.addEventListener("push", (event) => {
       const body = "点击查看详情";
       const notifConfig = configs[priority] ?? configs.default;
 
+      const messageId = msg?.id ?? data.id;
       await self.registration.showNotification(title, {
         body,
-        data: { url: `/?focus=${msg?.id ?? data.id}` },
+        data: { url: messageId ? `/message/${messageId}` : "/" },
         ...notifConfig,
       } as NotificationOptions);
     })()

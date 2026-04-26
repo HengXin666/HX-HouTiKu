@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { LockScreen } from "@/pages/LockScreen";
@@ -14,6 +14,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { registerPushSubscription } from "@/lib/push";
 import { hasWebPush, isNativeAndroid, getNativeBridge } from "@/lib/platform";
 import { wsInit, wsDestroy } from "@/lib/ws-manager";
+import { decryptMessage } from "@/lib/crypto";
 
 export function App() {
   const status = useAuthStore((s) => s.status);
@@ -21,6 +22,7 @@ export function App() {
   const initSettings = useSettingsStore((s) => s.initialize);
   const pushEnabled = useSettingsStore((s) => s.pushEnabled);
   const recipientToken = useAuthStore((s) => s.recipientToken);
+  const privateKeyHex = useAuthStore((s) => s.privateKeyHex);
   const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string } | null>(null);
 
   useEffect(() => {
@@ -35,6 +37,31 @@ export function App() {
         setUpdateInfo({ version, url });
       };
       return () => { window.__hxNativeUpdateAvailable = undefined; };
+    }
+  }, []);
+
+  // Android 解密回调: 原生层请求 JS 解密消息内容用于更新系统通知
+  // 参考: https://developer.android.com/reference/android/webkit/WebView#evaluateJavascript
+  const pkRef = useRef(privateKeyHex);
+  pkRef.current = privateKeyHex;
+  useEffect(() => {
+    if (isNativeAndroid) {
+      window.__hxNativeDecryptForNotification = (notifId: number, encryptedBase64: string, _messageId: string) => {
+        const pk = pkRef.current;
+        if (!pk) return;
+        try {
+          const plain = decryptMessage(pk, encryptedBase64);
+          const bridge = getNativeBridge();
+          if (bridge) {
+            const title = plain.title || "新消息";
+            const body = plain.body || "";
+            bridge.updateNotification(notifId, title, body);
+          }
+        } catch (e) {
+          console.error("Decrypt for notification failed:", e);
+        }
+      };
+      return () => { window.__hxNativeDecryptForNotification = undefined; };
     }
   }, []);
 
@@ -76,6 +103,7 @@ export function App() {
 
   return (
     <BrowserRouter>
+      <NativeNavigateHandler />
       {updateInfo && (
         <UpdateBanner
           version={updateInfo.version}
@@ -94,6 +122,28 @@ export function App() {
       <AppContent status={status} />
     </BrowserRouter>
   );
+}
+
+/**
+ * 注册原生导航回调，让 Android 原生层可以请求 JS 导航到指定路由。
+ * 必须在 BrowserRouter 内部使用，因为需要 useNavigate。
+ * 参考: https://reactrouter.com/en/main/hooks/use-navigate
+ */
+function NativeNavigateHandler() {
+  const navigate = useNavigate();
+  const navRef = useRef(navigate);
+  navRef.current = navigate;
+
+  useEffect(() => {
+    if (isNativeAndroid) {
+      window.__hxNativeNavigate = (path: string) => {
+        navRef.current(path);
+      };
+      return () => { window.__hxNativeNavigate = undefined; };
+    }
+  }, []);
+
+  return null;
 }
 
 function AppContent({ status }: { status: string }) {

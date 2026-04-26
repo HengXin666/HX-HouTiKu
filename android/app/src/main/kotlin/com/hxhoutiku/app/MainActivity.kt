@@ -30,6 +30,7 @@ import androidx.core.view.WindowCompat
 import com.hxhoutiku.app.service.HxWebSocketService
 import com.hxhoutiku.app.updater.AppUpdater
 import kotlinx.coroutines.*
+import android.os.Handler
 
 /**
  * Hybrid Android shell: WebView loads the React frontend,
@@ -141,6 +142,70 @@ class MainActivity : AppCompatActivity() {
 
         // Request notification permission proactively on first launch
         requestNotificationPermissionIfNeeded()
+
+        // 注册解密回调，让 HxWebSocketService 可以请求 WebView 解密消息内容
+        // 参考: https://developer.android.com/develop/ui/views/notifications/build-notification#update-notification
+        registerDecryptCallback()
+
+        // 处理通知点击跳转（冷启动场景）
+        handleNotificationIntent(intent)
+    }
+
+    /**
+     * 当 Activity 已存在时（launchMode="singleTask"），通知点击会触发 onNewIntent。
+     * 提取 message_id 并导航到对应消息详情页。
+     * 参考: https://developer.android.com/reference/android/app/Activity#onNewIntent(android.content.Intent)
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    /**
+     * 处理通知点击的 Intent，将 WebView 导航到对应消息详情页。
+     * 支持冷启动（onCreate）和热启动（onNewIntent）两种场景。
+     * 参考: https://developer.android.com/guide/components/activities/tasks-and-back-stack
+     */
+    private fun handleNotificationIntent(intent: Intent?) {
+        val messageId = intent?.getStringExtra("message_id")
+        if (!messageId.isNullOrBlank()) {
+            intent.removeExtra("message_id")
+            val apiBase = getApiBase()
+            if (apiBase.isNotBlank()) {
+                scope.launch {
+                    delay(500)
+                    runOnUiThread {
+                        webView.evaluateJavascript(
+                            "(function(){" +
+                            "if(window.__hxNativeNavigate){window.__hxNativeNavigate('/message/$messageId');}" +
+                            "else{window.location.hash='/message/$messageId';}" +
+                            "})()",
+                            null
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 注册解密回调，让 HxWebSocketService 可以通过 WebView JS 解密消息内容。
+     * 解密完成后 JS 调用 HxNative.updateNotification() 更新通知。
+     * 参考: https://developer.android.com/reference/android/webkit/WebView#evaluateJavascript
+     */
+    private fun registerDecryptCallback() {
+        HxWebSocketService.setDecryptCallback(object : HxWebSocketService.Companion.DecryptCallback {
+            override fun requestDecrypt(notifId: Int, encryptedData: String, messageId: String) {
+                val escaped = encryptedData.replace("\\", "\\\\").replace("'", "\\'")
+                Handler(mainLooper).post {
+                    webView.evaluateJavascript(
+                        "window.__hxNativeDecryptForNotification && window.__hxNativeDecryptForNotification($notifId, '$escaped', '$messageId')",
+                        null
+                    )
+                }
+            }
+        })
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -499,6 +564,7 @@ class MainActivity : AppCompatActivity() {
         try {
             unregisterReceiver(wsBroadcastReceiver)
         } catch (_: Exception) { /* not registered */ }
+        HxWebSocketService.setDecryptCallback(null)
         scope.cancel()
         webView.destroy()
         super.onDestroy()
@@ -554,6 +620,15 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
             }
+        }
+
+        /**
+         * 更新系统通知内容（解密后由 JS 回调）。
+         * 参考: https://developer.android.com/develop/ui/views/notifications/build-notification#update-notification
+         */
+        @JavascriptInterface
+        fun updateNotification(notifId: Int, title: String, body: String) {
+            HxWebSocketService.updateNotification(this@MainActivity, notifId, title, body)
         }
 
         /**

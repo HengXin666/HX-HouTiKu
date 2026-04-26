@@ -24,6 +24,8 @@ export interface HxNativeBridge {
   checkUpdate(): void;
   openUrl(url: string): void;
   skipUpdate(version: string): void;
+  /** 更新系统通知内容（解密后回调） */
+  updateNotification(notifId: number, title: string, body: string): void;
 }
 
 declare global {
@@ -33,6 +35,10 @@ declare global {
     __hxNativeWsMessage?: (data: string) => void;
     __hxNativeWsStatus?: (status: string) => void;
     __hxNativeUpdateAvailable?: (version: string, downloadUrl: string) => void;
+    /** 解密回调: 原生层请求 JS 解密消息内容用于更新系统通知 */
+    __hxNativeDecryptForNotification?: (notifId: number, encryptedBase64: string, messageId: string) => void;
+    /** 导航回调: 原生层请求 JS 导航到指定路由 */
+    __hxNativeNavigate?: (path: string) => void;
   }
 }
 

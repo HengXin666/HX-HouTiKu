@@ -111,6 +111,59 @@ class HxWebSocketService : Service() {
         }
 
         /**
+         * 解密回调接口 — 由 MainActivity 注册，用于将加密消息传给 WebView JS 解密。
+         * 解密完成后 JS 通过 HxNativeBridge.updateNotification() 回调更新通知内容。
+         * 参考: https://developer.android.com/develop/ui/views/notifications/build-notification#update-notification
+         */
+        interface DecryptCallback {
+            fun requestDecrypt(notifId: Int, encryptedData: String, messageId: String)
+        }
+
+        @Volatile
+        private var decryptCallback: DecryptCallback? = null
+
+        fun setDecryptCallback(callback: DecryptCallback?) {
+            decryptCallback = callback
+        }
+
+        /**
+         * 更新已显示的通知内容（解密后调用）。
+         * 由 MainActivity 的 JS Bridge 调用。
+         * 参考: https://developer.android.com/reference/android/app/NotificationManager#notify(int,%20android.app.Notification)
+         */
+        fun updateNotification(context: Context, notifId: Int, title: String, body: String) {
+            val channelId = notifIdToChannel[notifId] ?: HxApp.CHANNEL_DEFAULT
+            val messageId = notifIdToMessageId[notifId] ?: ""
+
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("message_id", messageId)
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context, notifId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val builder = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setGroup("hx_messages")
+                .setColor(0xFF1D9BF0.toInt())
+
+            val manager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(notifId, builder.build())
+        }
+
+        /** 通知 ID → 通知渠道 ID 的映射，用于更新通知时保持渠道一致 */
+        private val notifIdToChannel = mutableMapOf<Int, String>()
+        /** 通知 ID → 消息 ID 的映射，用于更新通知时保持跳转目标一致 */
+        private val notifIdToMessageId = mutableMapOf<Int, String>()
+
+        /**
          * Start the WebSocket foreground service.
          */
         fun start(context: Context, wsUrl: String, token: String, recipientId: String) {
@@ -429,7 +482,8 @@ class HxWebSocketService : Service() {
             val group = msg.optString("group", "general")
             val groupKey = msg.optString("group_key", "")
 
-            showMessageNotification(msgId, priority, group, groupKey)
+            val encryptedData = msg.optString("encrypted_data", "")
+            showMessageNotification(msgId, priority, group, groupKey, encryptedData)
 
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse WS message for notification", e)
@@ -441,7 +495,7 @@ class HxWebSocketService : Service() {
      * Uses the priority-based notification channels from HxApp for
      * appropriate sound, vibration, and heads-up display behavior.
      */
-    private fun showMessageNotification(messageId: String, priority: String, group: String, groupKey: String = "") {
+    private fun showMessageNotification(messageId: String, priority: String, group: String, groupKey: String = "", encryptedData: String = "") {
         val title = when (priority) {
             "urgent" -> "🔴 紧急 · $group"
             "high" -> "🟠 重要 · $group"
@@ -465,6 +519,15 @@ class HxWebSocketService : Service() {
             else -> HxApp.CHANNEL_DEFAULT
         }
 
+        // Allocate notification ID before creating PendingIntent
+        // 参考: https://developer.android.com/reference/android/app/PendingIntent#getActivity
+        val currentNotifId = messageNotifId++
+        if (messageNotifId > 9999) messageNotifId = 3000
+
+        // 缓存通知 ID 与渠道/消息 ID 的映射，供 updateNotification 使用
+        notifIdToChannel[currentNotifId] = channelId
+        notifIdToMessageId[currentNotifId] = messageId
+
         // Intent to open the app and navigate to the message
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -472,7 +535,7 @@ class HxWebSocketService : Service() {
         }
 
         val pendingIntent = PendingIntent.getActivity(
-            this, messageNotifId, intent,
+            this, currentNotifId, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -516,12 +579,15 @@ class HxWebSocketService : Service() {
         }
 
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(messageNotifId++, builder.build())
-
-        // Prevent ID overflow
-        if (messageNotifId > 9999) messageNotifId = 3000
+        manager.notify(currentNotifId, builder.build())
 
         Log.d(TAG, "System notification shown: $title (channel=$channelId)")
+
+        // 请求 JS 层解密消息内容，解密完成后通过 updateNotification 更新通知
+        // 参考: https://developer.android.com/develop/ui/views/notifications/build-notification#update-notification
+        if (encryptedData.isNotBlank()) {
+            decryptCallback?.requestDecrypt(currentNotifId, encryptedData, messageId)
+        }
     }
 
     // ─── Foreground Service Notification ────────────────────────
