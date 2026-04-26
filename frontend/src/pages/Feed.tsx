@@ -77,7 +77,6 @@ export function Feed() {
     const d = new Date(m.timestamp);
     return d.toDateString() === today.toDateString();
   }).length;
-  const unreadCount = messages.filter((m) => !m.is_read).length;
   const urgentCount = messages.filter((m) => m.priority === "urgent" && !m.is_read).length;
 
   const counts: Record<string, number> = {
@@ -209,13 +208,13 @@ export function Feed() {
       <div className="feed-dashboard">
         <div className="feed-dashboard-stats">
           <div className="feed-stat">
+            <span className="feed-stat-label">今</span>
             <span className="feed-stat-value">{todayCount}</span>
-            <span className="feed-stat-label">今日</span>
           </div>
           <div className="feed-stat-divider" />
           <div className="feed-stat">
             <CheckCircle2 style={{ width: 14, height: 14, color: "var(--color-priority-low)" }} />
-            <span className="feed-stat-label">CI 通过</span>
+            <span className="feed-stat-label">CI</span>
           </div>
           <div className="feed-stat-divider" />
           <div className="feed-stat">
@@ -223,7 +222,6 @@ export function Feed() {
             <span className="feed-stat-value" style={urgentCount > 0 ? { color: "var(--color-priority-urgent)" } : undefined}>
               {urgentCount}
             </span>
-            <span className="feed-stat-label">告警</span>
           </div>
           <div className="feed-stat-divider" />
           <div className={cn(
@@ -239,17 +237,12 @@ export function Feed() {
             )}
             <span>
               {wsStatus === "connected"
-                ? `在线${deviceCount > 1 ? ` · ${deviceCount}` : ""}`
-                : wsStatus === "connecting" ? "连接中" : "离线"}
+                ? (deviceCount > 1 ? `${deviceCount}` : "")
+                : wsStatus === "connecting" ? "…" : ""}
             </span>
           </div>
         </div>
         <div className="feed-dashboard-actions">
-          {unreadCount > 0 && (
-            <div className="feed-dashboard-unread">
-              <strong>{unreadCount}</strong> 未读
-            </div>
-          )}
           {!selectMode && messages.length > 0 && (
             <button
               onClick={() => setSelectMode(true)}
